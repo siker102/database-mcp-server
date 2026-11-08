@@ -42,3 +42,27 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `tests/integration/test_db_init.py`.
 
 ### Review und Anpassungen durch mich
+
+## Etappe 2 – MCP-Server, feste Tools, Auth und Observability
+
+- **Ziel:** Server über HTTP mit vier festen Tools, API-Keys, Scopes, Rate Limit, Logs, Audit,
+  Metriken.
+- **Generiert:** `app.py`, `auth.py`, `observability.py`, `services/passengers.py`,
+  `services/dataset.py`, `db/repository.py`, `tools/`, `scripts/generate_api_key.py`,
+  Tests `tests/unit/test_auth.py` und `tests/integration/test_mcp_http.py`, ADR 0001, 0003, 0005.
+- **SDK geprüft statt angenommen:** `mcp` 2.3.0 – `FastMCP` heißt jetzt `MCPServer`; das SDK
+  bietet `TokenVerifier`, `BearerAuthBackend`, `RequireAuthMiddleware`,
+  `TransportSecuritySettings` und `ServerMiddleware`; akzeptierte Protokollversionen stehen in
+  `mcp.types.version`.
+- **Fehler / falsche Annahmen der KI:**
+  - Die SDK-Variante `streamable_http_app(auth=...)` verlangt eine OAuth-`issuer_url`. Statt eine
+    URL zu erfinden, setzt die App die Auth-Bausteine des SDK selbst zusammen (ADR 0001).
+  - Die erste Filterung von `tools/list` erwartete ein Pydantic-Modell; die Middleware bekommt das
+    Ergebnis aber als Dict. Behoben (beide Formen, sonst Fehler statt stiller Durchlass).
+  - Eine Union als Rückgabetyp packt das SDK in `{"result": ...}`; `get_passenger` liefert daher
+    ein eigenes Modell `{"passenger": ...}`.
+- **Lesereihenfolge:** `app.py` → `auth.py` → `tools/common.py` → `tools/definitions.py` →
+  `services/passengers.py` → `db/repository.py` → `observability.py` →
+  `tests/integration/test_mcp_http.py`.
+
+### Review und Anpassungen durch mich
