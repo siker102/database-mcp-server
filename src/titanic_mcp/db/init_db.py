@@ -15,6 +15,7 @@ from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from titanic_mcp.db.schema import PUBLIC_VIEW
@@ -86,14 +87,33 @@ async def _apply_rights(conn: AsyncConnection, database: str, app: str, sql: str
         f"REVOKE ALL ON passengers FROM {q_sql}",
         f"GRANT SELECT ON passengers, {PUBLIC_VIEW} TO {q_app}",
         f"GRANT SELECT ON {PUBLIC_VIEW} TO {q_sql}",
-        # Role defaults are an extra brake only; the hard boundary is the GRANT above.
-        f"ALTER ROLE {q_sql} SET default_transaction_read_only = on",
-        f"ALTER ROLE {q_sql} SET statement_timeout = '5s'",
-        f"ALTER ROLE {q_sql} SET temp_file_limit = '{TEMP_FILE_LIMIT}'",
-        f"ALTER ROLE {q_app} SET default_transaction_read_only = on",
     ]
     for statement in statements:
         await conn.execute(text(statement))
+
+
+async def _apply_role_defaults(conn: AsyncConnection, app: str, sql: str) -> None:
+    """Set role defaults; only with ``--create-roles``, i.e. when this job manages the roles.
+
+    Defaults are an extra brake only; the hard boundary is the GRANT. ``temp_file_limit`` may only
+    be set by a superuser; without that right the job warns and continues, and the DB team sets
+    it (see RUNBOOK).
+    """
+    q_app = _quote_ident(conn, app)
+    q_sql = _quote_ident(conn, sql)
+    for statement in (
+        f"ALTER ROLE {q_sql} SET default_transaction_read_only = on",
+        f"ALTER ROLE {q_sql} SET statement_timeout = '5s'",
+        f"ALTER ROLE {q_app} SET default_transaction_read_only = on",
+    ):
+        await conn.execute(text(statement))
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(f"ALTER ROLE {q_sql} SET temp_file_limit = '{TEMP_FILE_LIMIT}'")
+            )
+    except DBAPIError:
+        log.warning("temp_file_limit_not_set", role=sql, reason="needs superuser")
 
 
 async def run_db_init(
@@ -116,6 +136,7 @@ async def run_db_init(
         if create_roles:
             await _create_or_update_role(conn, app_role)
             await _create_or_update_role(conn, sql_role)
+            await _apply_role_defaults(conn, app_role.name, sql_role.name)
         await _apply_rights(conn, database, app_role.name, sql_role.name)
         inserted = await seed(conn, rows)
     log.info("db_init_finished", inserted_rows=inserted, total_rows=len(rows))
