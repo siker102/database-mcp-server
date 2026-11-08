@@ -83,3 +83,35 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `tests/security/test_sql_attacks.py` → `docs/adr/0004-...` → `docs/SECURITY.md`.
 
 ### Review und Anpassungen durch mich
+
+## Etappe 4 – Container, Helm-Chart, Ende-zu-Ende-Test und Abschluss
+
+- **Ziel:** Image, Compose-Stack mit Smoke-Test, Helm-Chart, CI-Prüfungen, Abschluss der Doku.
+- **Generiert:** `scripts/smoke.py`, `deploy/helm/titanic-mcp/` (Deployment, Service,
+  ServiceAccounts, NetworkPolicies, PDB, db-init-Hook-Job, Ingress, ServiceMonitor,
+  `values.schema.json`), ADR 0006, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `README.md`.
+- **Lokal verifiziert:** `docker compose up --build --wait` + `scripts/smoke.py` (alle 6 Prüfungen
+  OK); `helm lint --strict` und `kubeconform -strict` (10 gültig, ServiceMonitor als CRD
+  übersprungen) über die offiziellen Images; hadolint ohne Befund; Trivy-Image-Scan ohne
+  HIGH/CRITICAL mit Fix; `trivy config` ohne HIGH/CRITICAL; pip-audit ohne Befund; Makefile-Targets
+  `install`, `lint`, `typecheck` in einem Linux-Container.
+- **Nicht verifiziert:** CI-Lauf auf GitHub (kein Push), Start des Dev Containers, Installation in
+  einem echten Cluster, die Client-Befehle für MCP Inspector und Claude Code (aus der jeweiligen
+  Doku übernommen, nicht ausgeführt).
+- **Fehler / falsche Annahmen der KI:**
+  - Trivy fand im Basis-Image HIGH-Schwachstellen in `zlib1g` (Debian-Fix neuer als der gepinnte
+    Digest) und in den von pip mitgebrachten Bibliotheken. Behoben: gezieltes Sicherheitsupdate von
+    `zlib1g` und pip im Laufzeit-Image entfernt.
+  - `pip-audit --strict` bricht ab, weil das eigene Paket nicht auf PyPI liegt; ersetzt durch
+    `--skip-editable`.
+  - `db-init` setzte Rollen-Defaults auch ohne `--create-roles`; ohne `CREATEROLE`/Superuser wäre
+    der Job in echten Umgebungen gescheitert. Rollen-Defaults jetzt nur mit `--create-roles`,
+    `temp_file_limit` mit Warnung statt Abbruch, SQL für das DB-Team im README.
+  - `trivy config` bemängelte, dass das Dev-Container-Dockerfile als root endet; `USER vscode`
+    ergänzt.
+- **Lesereihenfolge:** `Dockerfile` → `docker-compose.yml` → `scripts/smoke.py` →
+  `deploy/helm/titanic-mcp/values.yaml` → `templates/deployment.yaml` →
+  `templates/networkpolicy.yaml` → `templates/job-db-init.yaml` → `README.md` (Kubernetes) →
+  `docs/RUNBOOK.md`.
+
+### Review und Anpassungen durch mich

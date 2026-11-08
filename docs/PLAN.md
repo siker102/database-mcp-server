@@ -423,6 +423,9 @@ stehen oben unter „Entscheidungen aus dem BSI-Abgleich“.
   Aggregaten) – für den öffentlichen Titanic-Datensatz unverhältnismäßig, bei echten Personendaten
   nötig.
 - Schreibende Tools mit Berechtigungen pro Operation – von der Aufgabe nicht gefordert.
+- Secret-Scanning mit gitleaks (Pre-commit und CI) – aus Zeitgründen gestrichen; Ersatz: Hook
+  `detect-private-key`, das Key-Präfix `tmcp_` für Scanner der Plattform und gitignorierte
+  `.env`/`secrets/`.
 - Regelmäßiger Neustart der Pods (höchstens 24 h Laufzeit) [BSI APP.4.4.A21, erhöhter Schutzbedarf] –
   bei normalem Schutzbedarf nicht gefordert.
 - Erweiterte Mandatory-Access-Control-Profile (AppArmor/SELinux) über seccomp `RuntimeDefault`
