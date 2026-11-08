@@ -48,10 +48,13 @@ services:
       DBMCP_DB_APP_PASSWORD: ${DBMCP_DB_APP_PASSWORD:?}
       DBMCP_DB_SQL_PASSWORD: ${DBMCP_DB_SQL_PASSWORD:?}
       DBMCP_API_KEYS_FILE: /run/secrets/api_keys.json
+      # Host headers accepted on /mcp; add the name or IP clients use (README: Checkliste).
+      DBMCP_ALLOWED_HOSTS: '${DBMCP_ALLOWED_HOSTS:-["localhost:*","127.0.0.1:*"]}'
     volumes:
       - ./secrets/api_keys.json:/run/secrets/api_keys.json:ro
     ports:
-      - "127.0.0.1:8000:8000"
+      # Loopback by default, so nothing is exposed to the network unless DBMCP_BIND_ADDRESS is set.
+      - "${DBMCP_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

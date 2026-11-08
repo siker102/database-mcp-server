@@ -9,7 +9,9 @@ Sicherheitsmaßstab sind die Vorgaben des BSI (Grundschutz++, Bausteine SYS.1.6 
 TR-02102, TR-03183-2). Das Projekt *orientiert sich* daran; es ist kein Konformitätsnachweis.
 Details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
-**Inhalt:** [Schnellstart](#schnellstart-lokal) · [Manuell testen](#manuell-testen) ·
+**Inhalt:** [Schnellstart](#schnellstart-lokal) ·
+[Checkliste für Agents](#checkliste-was-ein-agent-für-die-verbindung-braucht) ·
+[Manuell testen](#manuell-testen) ·
 [Tests ausführen](#tests-ausführen) · [Testübersicht](#testübersicht) ·
 [Ports und Firewall](#netzwerk-ports-und-firewall-regeln) ·
 [Kubernetes](#integration-in-einen-kubernetes-cluster) · [Tools und Scopes](#tools-und-scopes) ·
@@ -40,6 +42,71 @@ Demo-Key wird einmal angezeigt und liegt in `secrets/demo_api_key`. Port 8000 wi
 Container nach Windows weitergeleitet.
 
 `make help` listet alle Befehle.
+
+## Checkliste: Was ein Agent für die Verbindung braucht
+
+Ein Agent kann den Server nutzen, wenn **alle** Punkte erfüllt sind – egal ob der Server lokal, als
+Container im Netz oder im Kubernetes-Cluster läuft. Die rechte Spalte zeigt, woran man einen
+fehlenden Punkt erkennt.
+
+| # | Voraussetzung | Wo einstellen | Fehlerbild, wenn es fehlt |
+|---|---|---|---|
+| 1 | **Netzwerk:** Die URL `http(s)://<host>[:<port>]/mcp` ist vom Agent aus erreichbar | Compose: `DBMCP_BIND_ADDRESS` (Default `127.0.0.1`, also nur dieser Rechner). Kubernetes: über den Ingress (Pfad `/mcp`); direkter Zugriff auf den Service ist durch die NetworkPolicy gesperrt | Timeout oder „connection refused“ |
+| 2 | **Hostname freigegeben:** Der Name (oder die IP), den der Agent in der URL verwendet, steht in der Host-Allowlist | `DBMCP_ALLOWED_HOSTS` bzw. Helm `server.allowedHosts`; der Ingress-Host wird von Helm automatisch ergänzt | HTTP **421** „Invalid Host header“ |
+| 3 | **Nur für Browser-Clients:** Die Herkunft (`Origin`) ist freigegeben | `DBMCP_ALLOWED_ORIGINS` bzw. `server.allowedOrigins` (Default leer, denn Agents sind keine Browser) | HTTP **403** „Invalid Origin header“ |
+| 4 | **Gültiger API-Key:** Der Agent sendet `Authorization: Bearer dbmcp_…`; der Key steht in der Key-Datei und ist nicht abgelaufen | Key mit `scripts/generate_api_key.py` erzeugen, Eintrag in `api_keys.json` (Compose: `secrets/`, Kubernetes: Secret `database-mcp-api-keys`), Server neu starten | HTTP **401** mit `WWW-Authenticate: Bearer` (bewusst ohne Begründung) |
+| 5 | **Passender Scope:** `read` für die festen Tools, `pii` zusätzlich für Namen/Ticket/Kabine, `sql` für `run_sql` | Beim Erzeugen des Keys (`--scopes read,sql`) | Das Tool fehlt in `tools/list`; ein direkter Aufruf liefert einen Tool-Fehler |
+| 6 | **Passender Client:** spricht MCP über Streamable HTTP (Revision 2026-07-28 oder 2024-11-05 bis 2025-11-25) und kann einen eigenen `Authorization`-Header setzen | Konfiguration des Agents bzw. MCP-Clients | Verbindungsfehler im Client; HTTP 400 bei falschem `Content-Type` |
+| 7 | **Rate Limit eingehalten:** höchstens 60 Aufrufe pro Minute und Key (Burst 20), pro Pod | `DBMCP_RATE_LIMIT_PER_MINUTE`, `DBMCP_RATE_LIMIT_BURST` | HTTP **429** |
+| 8 | **Verschlüsselt außerhalb des eigenen Rechners:** über Netze nur per HTTPS, sonst wandert der Key im Klartext | TLS am Ingress (TLS 1.3 oder 1.2 mit PFS) | Kein Fehler – deshalb besonders wichtig |
+
+### Host-Allowlist (`DBMCP_ALLOWED_HOSTS`)
+
+Jede HTTP-Anfrage enthält den Header `Host` mit dem Namen aus der URL, z. B. `Host: mcp.example.com`.
+Der Server beantwortet `/mcp` nur, wenn dieser Wert in der Allowlist steht. Das ist der Schutz des
+MCP-SDK gegen **DNS-Rebinding**: Eine bösartige Webseite könnte sonst einen eigenen Domainnamen auf
+die interne Adresse des Servers umbiegen und den Browser eines Mitarbeiters Anfragen an den Server
+stellen lassen. Mit der Allowlist antwortet der Server nur auf Namen, unter denen er wirklich
+erreichbar sein soll.
+
+Format: JSON-Liste. Ein Eintrag passt entweder exakt (`"mcp.example.com"`, `"10.0.0.5:8000"`) oder
+mit beliebigem Port (`"mcp.example.com:*"`). Achtung: `:*` passt nur, wenn die URL einen Port
+enthält. Bei HTTPS auf Port 443 sendet der Client den Namen **ohne** Port; dafür braucht es den
+exakten Eintrag ohne Port (so setzt Helm den Ingress-Host).
+
+| Zugriff über | Eintrag in der Allowlist |
+|---|---|
+| `http://localhost:8000/mcp` (Default) | `"localhost:*"` |
+| `http://192.168.1.50:8000/mcp` (Container im Netz) | `"192.168.1.50:*"` |
+| `https://mcp.example.com/mcp` (Ingress) | `"mcp.example.com"` – setzt Helm automatisch |
+| `http://database-mcp.database-mcp.svc.cluster.local:8000/mcp` (direkt im Cluster) | `"database-mcp.database-mcp.svc.cluster.local:*"` |
+
+Beispiel Compose im vertrauenswürdigen Testnetz (in `.env`, danach `make up`):
+
+```bash
+DBMCP_BIND_ADDRESS=0.0.0.0
+DBMCP_ALLOWED_HOSTS=["localhost:*","127.0.0.1:*","192.168.1.50:*"]
+```
+
+Dann ist der Server ohne TLS im Netz erreichbar – nur für Tests. Gegebenenfalls muss die Firewall
+des Rechners eingehende Verbindungen auf Port 8000 erlauben.
+
+### Weg einer Anfrage im Cluster
+
+```
+Agent ──HTTPS 443──▶ Load Balancer / Ingress-Controller ──HTTP 8000──▶ Service database-mcp ──▶ Pod
+                     · terminiert TLS                       (nur aus dem Namespace des
+                     · Rate Limit pro Client-IP               Ingress-Controllers erlaubt)
+                     · reicht nur den Pfad /mcp weiter
+                     · setzt X-Forwarded-For, behält den Host-Header
+```
+
+Agents – auch solche im selben Cluster – rufen den Server über die Ingress-URL auf (z. B.
+`https://mcp.example.com/mcp`). Grund: Nur dort gibt es TLS, das Rate Limit pro IP und die
+Client-IP für das Audit-Log; außerdem ist es für alle Agents derselbe Weg. Ein direkter Zugriff auf
+den Service aus einem anderen Namespace ist möglich, braucht aber drei Änderungen: die NetworkPolicy
+um den Namespace des Agents erweitern, den Service-Namen in `server.allowedHosts` aufnehmen und die
+Strecke per Service Mesh verschlüsseln (Abweichung A1).
 
 ## Manuell testen
 
