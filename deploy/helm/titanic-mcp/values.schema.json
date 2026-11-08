@@ -13,6 +13,10 @@
         "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
       }
     },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string", "minLength": 1}}}
+    },
     "replicaCount": {"type": "integer", "minimum": 1},
     "database": {
       "type": "object",

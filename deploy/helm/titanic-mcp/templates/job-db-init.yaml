@@ -24,6 +24,10 @@ spec:
       restartPolicy: Never
       serviceAccountName: {{ include "titanic-mcp.fullname" . }}-db-init
       automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile:

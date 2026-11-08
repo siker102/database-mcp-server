@@ -8,6 +8,10 @@ image:
   digest: ""
   pullPolicy: IfNotPresent
 
+# Pull secrets for a private registry, e.g. [{name: registry-credentials}]. The secret is created
+# outside the chart (kubectl create secret docker-registry ...), like all other secrets.
+imagePullSecrets: []
+
 # Two replicas so a restart or node drain causes no outage.
 replicaCount: 2
 

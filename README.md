@@ -11,6 +11,7 @@ Details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 **Inhalt:** [Schnellstart](#schnellstart-lokal) · [Manuell testen](#manuell-testen) ·
 [Tests ausführen](#tests-ausführen) · [Testübersicht](#testübersicht) ·
+[Ports und Firewall](#netzwerk-ports-und-firewall-regeln) ·
 [Kubernetes](#integration-in-einen-kubernetes-cluster) · [Tools und Scopes](#tools-und-scopes) ·
 [Konfiguration](#konfiguration) · [Architektur](#architektur) · [Annahmen](#annahmen) ·
 [Grenzen und offene Punkte](#bekannte-grenzen-offene-punkte-und-ausblick) ·
@@ -164,6 +165,58 @@ Stand: 127 Tests, Coverage ca. 92 %.
 | `tests/security/test_sql_attacks.py` | 40 Angriffs-Queries gegen den Validator (DML/DDL, `COPY`, `SET`, mehrere Statements, Kommentare, datenverändernde CTEs, `SELECT INTO`, `FOR UPDATE`, Systemkataloge, `pg_sleep`, `pg_read_file`, `dblink`, `lo_*`, `set_config`, Tabellenfunktionen, Überlänge); gültige Analyse-Queries; Zeilenlimit/`truncated`; Cross-Join abgebrochen; Rolle `titanic_sql` blockt Angriffe **ohne** Validator; `NullPool` verhindert, dass `set_config` die nächste Abfrage beeinflusst; Timeout ohne Validator | Defense in Depth [BSI DEV.2.6, TEST.3.1], Ressourcen [KONF.9.1, KONF.15.3] |
 | `scripts/smoke.py` (`make smoke`) | Ende-zu-Ende gegen den laufenden Compose-Stack bzw. einen Cluster | Bereitstellung funktioniert [BSI TEST.5.4] |
 
+## Netzwerk: Ports und Firewall-Regeln
+
+Der Server nimmt Verbindungen auf zwei Ports an und baut selbst nur Verbindungen zur Datenbank und
+zum DNS auf; er ruft keine externen Dienste auf (keine Telemetrie, keine Downloads zur Laufzeit).
+Alles, was nicht unten steht, wird nicht gebraucht und sollte gesperrt bleiben [BSI KONF.11.7,
+APP.4.4.A7].
+
+**Ports des Servers**
+
+| Port | Protokoll | Inhalt | Wer darf zugreifen | Von außen erreichbar? |
+|---|---|---|---|---|
+| 8000 | TCP, HTTP | `/mcp` (MCP-Endpunkt), `/healthz`, `/readyz` | Ingress-Controller; kubelet für die Probes | Nur `/mcp`, und nur über den Ingress per HTTPS (der Ingress veröffentlicht ausschließlich den Pfad `/mcp`) |
+| 9090 | TCP, HTTP | `/metrics` (Prometheus) | Prometheus im Monitoring-Namespace | Nein – Metriken verraten Teamnamen und Nutzungsmuster |
+
+**Benötigte Verbindungen (Freigaben)**
+
+| # | Quelle → Ziel | Port | Zweck | Wo freigeben |
+|---|---|---|---|---|
+| 1 | Agents der Teams → Ingress/Load Balancer | 443/TCP (HTTPS) | MCP-Aufrufe | Firewall/Security Group vor dem Ingress; Quellnetze der Teams per Allowlist einschränken. Port 80 nur für eine Weiterleitung auf HTTPS oder geschlossen |
+| 2 | Ingress-Controller → Server-Pods | 8000/TCP | Weiterleitung von `/mcp` | NetworkPolicy des Charts (`networkPolicy.ingressNamespace`) |
+| 3 | kubelet (Node) → Server-Pods | 8000/TCP | Liveness-, Readiness-, Startup-Probe | Laut Kubernetes-Dokumentation ist Verkehr vom eigenen Node zum Pod trotz NetworkPolicy erlaubt; manche CNIs verlangen eine eigene Regel – nach der Installation mit `kubectl get pods` prüfen, ob die Pods `Ready` werden |
+| 4 | Prometheus → Server-Pods | 9090/TCP | Metriken abholen | NetworkPolicy des Charts (`networkPolicy.monitoringNamespace`) |
+| 5 | Server-Pods und Job `db-init` → PostgreSQL | 5432/TCP (`database.port`) | Datenbank, immer TLS mit `verify-full` | NetworkPolicy (`networkPolicy.databaseCidr` auf den Adressbereich der DB eingrenzen); zusätzlich Firewall bzw. Security Group der Datenbank für die ausgehenden Adressen des Clusters (je nach CNI Pod-CIDR, Node-IPs oder NAT-Gateway) |
+| 6 | Server-Pods und Job `db-init` → Cluster-DNS (`kube-dns`) | 53/UDP und 53/TCP | Namensauflösung, z. B. des DB-Hosts | NetworkPolicy des Charts |
+| 7 | Nodes → Container-Registry | 443/TCP | Image ziehen | Firewall der Nodes (betrifft die Nodes, nicht die Pods) |
+
+Alle anderen ein- und ausgehenden Verbindungen der Pods sperrt die Default-Deny-NetworkPolicy des
+Charts. Voraussetzung ist ein CNI, das NetworkPolicies durchsetzt (z. B. Calico, Cilium); ohne ein
+solches CNI sind die Regeln wirkungslos.
+
+**PostgreSQL-Seite.** Die Datenbank muss Verbindungen aus dem Cluster nur per TLS annehmen. Beispiel
+für `pg_hba.conf` (Adressbereich an den Cluster anpassen):
+
+```text
+# TYPE   DATABASE  USER                                   ADDRESS        METHOD
+hostssl  titanic   titanic_owner,titanic_app,titanic_sql  10.0.0.0/16    scram-sha-256
+```
+
+`hostssl` lehnt unverschlüsselte Verbindungen auf Serverseite ab; zusammen mit `verify-full` in der
+App ist die Strecke von beiden Seiten abgesichert [BSI KONF.14.1, KONF.14.1.1]. Die Rolle
+`titanic_owner` braucht der Server selbst nicht; sie lässt sich auf die Zeit von Installation und
+Upgrade (Job `db-init`) beschränken.
+
+**Service Mesh.** Wird die Strecke Ingress → Pod über ein Service Mesh verschlüsselt (Abweichung A1
+in `docs/PLAN.md`), braucht der Sidecar eigene Ports (bei Istio z. B. 15001, 15006, 15008, 15021,
+15090). Die NetworkPolicy des Charts muss dann um diese Ports ergänzt oder durch die Policies des
+Mesh ersetzt werden.
+
+**Lokal (Compose).** Server (`8000`) und Postgres (`5432`) sind nur an `127.0.0.1` gebunden und
+damit von anderen Rechnern im Netz nicht erreichbar; eine Firewall-Freigabe ist nicht nötig. Der Dev
+Container leitet Port 8000 nach Windows weiter.
+
 ## Integration in einen Kubernetes-Cluster
 
 Die folgenden Schritte installieren den Server in einen bestehenden Cluster mit externer
@@ -186,6 +239,7 @@ PostgreSQL-Datenbank. Geprüft ist das Chart statisch (`helm lint --strict`, `ku
     externes Secret-Management (External Secrets Operator, Vault).
   - Log-Plattform, die Audit-Events (`event=audit`) revisionssicher ablegt [BSI DET.3.5].
 - Eine Container-Registry, aus der der Cluster ziehen darf.
+- Die Netzwerk-Freigaben aus [Ports und Firewall-Regeln](#netzwerk-ports-und-firewall-regeln).
 
 ### 2. Image bauen und pushen
 
@@ -243,6 +297,16 @@ uv run python scripts/generate_api_key.py --agent report-bot --team analytics --
 uv run python scripts/generate_api_key.py --agent sql-bot --team data-science --scopes read,sql --days 365 --append api_keys.json
 kubectl -n titanic-mcp create secret generic titanic-mcp-api-keys --from-file=api_keys.json
 shred -u api_keys.json
+```
+
+Zugangsdaten für eine private Registry (falls nötig; in `my-values.yaml` dann
+`imagePullSecrets: [{name: registry-credentials}]` setzen):
+
+```bash
+read -rs REGISTRY_TOKEN
+kubectl -n titanic-mcp create secret docker-registry registry-credentials \
+  --docker-server=registry.example.com --docker-username=<user> --docker-password="$REGISTRY_TOKEN"
+unset REGISTRY_TOKEN
 ```
 
 CA der Datenbank (falls nötig):

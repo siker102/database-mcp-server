@@ -23,6 +23,10 @@ spec:
     spec:
       serviceAccountName: {{ include "titanic-mcp.fullname" . }}
       automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         fsGroup: 10001
