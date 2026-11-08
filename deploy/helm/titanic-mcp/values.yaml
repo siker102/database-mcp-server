@@ -1,0 +1,95 @@
+# Values for the titanic-mcp chart. Secrets are never set here: the chart only references
+# existing Kubernetes Secrets [BSI DEV.2.5, SYS.1.6.A8].
+
+image:
+  repository: registry.example.com/titanic-mcp
+  tag: "0.1.0"
+  # Prefer an immutable digest in production (sha256:...); it wins over the tag when set.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Two replicas so a restart or node drain causes no outage.
+replicaCount: 2
+
+database:
+  host: postgres.example.internal
+  port: 5432
+  name: titanic
+  # verify-full checks encryption and certificate [BSI KONF.14.1]; do not weaken in production.
+  sslmode: verify-full
+  # Optional Secret with key "ca.crt" holding the CA of the database server certificate.
+  caSecret: ""
+  ownerUser: titanic_owner
+  appUser: titanic_app
+  sqlUser: titanic_sql
+
+existingSecrets:
+  # Secret with keys: owner-password (only used by the db-init job), app-password, sql-password.
+  database: titanic-mcp-db
+  # Secret with key api_keys.json (generated with scripts/generate_api_key.py).
+  apiKeys: titanic-mcp-api-keys
+
+dbInit:
+  # Runs migrations, rights and seed as a Helm hook before install and upgrade.
+  enabled: true
+  # Create the login roles too (needs CREATEROLE); usually the DB team provides the roles.
+  createRoles: false
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+
+server:
+  logLevel: INFO
+  # Host headers accepted on /mcp (DNS-rebinding protection). The ingress host is added
+  # automatically when the ingress is enabled.
+  allowedHosts: ["localhost:*", "127.0.0.1:*"]
+  allowedOrigins: []
+  rateLimitPerMinute: 60
+  rateLimitBurst: 20
+  sqlTimeoutSeconds: 5
+  sqlMaxConcurrency: 4
+  clientIpHeader: x-forwarded-for
+
+service:
+  type: ClusterIP
+  port: 8000
+  metricsPort: 9090
+
+ingress:
+  # Off by default; TLS (1.3 or 1.2 with PFS) and a per-IP rate limit belong here.
+  enabled: false
+  className: ""
+  host: titanic-mcp.example.com
+  tlsSecretName: titanic-mcp-tls
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+  # Namespace of the ingress controller (allowed to reach port 8000).
+  ingressNamespace: ingress-nginx
+  # Namespace of Prometheus (allowed to reach port 9090).
+  monitoringNamespace: monitoring
+  # Egress to the database. Narrow this to the database address range.
+  databaseCidr: 0.0.0.0/0
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+    ephemeral-storage: 64Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+    ephemeral-storage: 128Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

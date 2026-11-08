@@ -1,0 +1,6 @@
+apiVersion: v2
+name: titanic-mcp
+description: Read-only MCP server for the Titanic dataset (API keys, scopes, audit log).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

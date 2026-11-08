@@ -1,0 +1,66 @@
+{{- if .Values.dbInit.enabled }}
+# Migrations, rights and seed before every install/upgrade. Runs as the owner role; the server
+# itself never gets write rights [BSI BER.4.1]. One task per container [BSI SYS.1.6.A11].
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "titanic-mcp.fullname" . }}-db-init
+  labels:
+    {{- include "titanic-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-init
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.dbInit.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.dbInit.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "titanic-mcp.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-init
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "titanic-mcp.fullname" . }}-db-init
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: db-init
+          image: {{ include "titanic-mcp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["db-init"{{ if .Values.dbInit.createRoles }}, "--create-roles"{{ end }}]
+          securityContext:
+            {{- include "titanic-mcp.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "titanic-mcp.dbEnv" . | nindent 12 }}
+            - name: TMCP_DB_OWNER_USER
+              value: {{ .Values.database.ownerUser | quote }}
+            - name: TMCP_DB_OWNER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.database }}
+                  key: owner-password
+          {{- if .Values.database.caSecret }}
+          volumeMounts:
+            - name: db-ca
+              mountPath: /etc/titanic-mcp/db-ca
+              readOnly: true
+          {{- end }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      {{- if .Values.database.caSecret }}
+      volumes:
+        - name: db-ca
+          secret:
+            secretName: {{ .Values.database.caSecret }}
+      {{- end }}
+{{- end }}
