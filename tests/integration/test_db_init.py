@@ -6,10 +6,10 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from database_mcp.config import DatabaseSettings
+from database_mcp.db.engine import create_engine
+from database_mcp.db.init_db import RoleSpec, run_db_init
 from tests.conftest import APP, DATA_FILE, OWNER, SQL, Database
-from titanic_mcp.config import DatabaseSettings
-from titanic_mcp.db.engine import create_engine
-from titanic_mcp.db.init_db import RoleSpec, run_db_init
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 

@@ -19,7 +19,7 @@ Clients sprechen noch die Revisionen mit `initialize`-Handshake.
   `MCP-Protocol-Version` an den passenden Pfad; beide Wege sind getestet
   (`test_modern_and_legacy_protocol_work`). Ältere Clients funktionieren also, z. B. für die Demo.
 - **DNS-Rebinding-Schutz** über `TransportSecuritySettings` des SDK: Nur konfigurierte
-  `Host`-Header (`TMCP_ALLOWED_HOSTS`) und `Origin`-Header (`TMCP_ALLOWED_ORIGINS`, Standard: keine)
+  `Host`-Header (`DBMCP_ALLOWED_HOSTS`) und `Origin`-Header (`DBMCP_ALLOWED_ORIGINS`, Standard: keine)
   werden bedient. Getestet in `test_wrong_host_header_is_rejected`.
 - Die Starlette-App bauen wir selbst: Der Session-Manager des SDK wird unter `/mcp` eingehängt, davor
   stehen die Authentifizierungs-Middleware des SDK mit unserem `TokenVerifier`, die SDK-Middleware

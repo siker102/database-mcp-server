@@ -1,4 +1,4 @@
-# CLAUDE.md – Titanic MCP Server
+# CLAUDE.md – Database MCP Server
 
 ## Kontext
 
@@ -270,17 +270,17 @@ auf `passengers` zugreifen oder schreiben kann.
 
 ## Authentifizierung
 
-- Header `Authorization: Bearer <key>`; Key-Format `tmcp_<key_id>_<secret>`
+- Header `Authorization: Bearer <key>`; Key-Format `dbmcp_<key_id>_<secret>`
   (Secret 32 Byte = 256 Bit aus `secrets.token_urlsafe`, das den kryptographisch sicheren
   Zufallsgenerator des Betriebssystems nutzt [BSI BER.7.2, BER.7.5, TR-02102-1]). Grund für die
   `key_id` im Key: Lookup ohne Vergleich gegen alle Hashes, und Logs können den Key benennen, ohne
-  ihn preiszugeben. Das Präfix `tmcp_` macht Keys für Secret-Scanner erkennbar.
+  ihn preiszugeben. Das Präfix `dbmcp_` macht Keys für Secret-Scanner erkennbar.
 - Gespeichert wird nur ein gesalzener Hash des Secrets, nie das Secret selbst: zufälliges Salt
   (16 Byte) pro Key, geprüft wird `SHA-256(salt ‖ secret)` mit `hmac.compare_digest` gegen
   Timing-Angriffe [BSI DEV.3.4, TR-02102-1]. Ein langsamer Hash wie bcrypt schützt nur schwache,
   von Menschen gewählte Passwörter; bei 256 Bit Zufall ist Ausprobieren aussichtslos.
 - Key-Konfiguration als JSON-Datei (in Kubernetes ein gemountetes Secret), Pfad über
-  `TMCP_API_KEYS_FILE`:
+  `DBMCP_API_KEYS_FILE`:
   `[{"key_id", "agent", "team", "scopes", "expires_at", "salt", "sha256"}]`.
   Grund: Keys lassen sich ohne Datenbank und ohne neues Image ändern; Zugangsdaten liegen nie im
   Code oder Image [BSI DEV.2.5, SYS.1.6.A8].
@@ -389,7 +389,7 @@ GitHub Codespaces.
 
 ## Konfiguration
 
-pydantic-settings mit Präfix `TMCP_`, alles über Umgebungsvariablen – so setzt Kubernetes Werte und
+pydantic-settings mit Präfix `DBMCP_`, alles über Umgebungsvariablen – so setzt Kubernetes Werte und
 Secrets ohne Konfigurationsdateien im Image [BSI DEV.2.5]. `.env.example` aktuell halten; keine
 Defaults für Secrets, damit nie versehentlich ein Beispielpasswort in Produktion läuft
 [BSI DEV.4.8]; sichere Werte als Default, unsichere nur ausdrücklich, z. B. `sslmode=verify-full`
@@ -399,7 +399,7 @@ Deployment auffällt und nicht erst beim ersten Request.
 ## Projektstruktur
 
 ```
-├── src/titanic_mcp/
+├── src/database_mcp/
 │   ├── __main__.py / cli.py   # CLI: `serve`, `db-init`
 │   ├── app.py                 # ASGI-App: MCP unter /mcp, Health-Routen, Lifespan
 │   ├── config.py
@@ -412,7 +412,7 @@ Deployment auffällt und nicht erst beim ersten Request.
 ├── scripts/                   # generate_api_key.py, smoke.py
 ├── data/titanic.csv
 ├── tests/{unit,integration,security}/
-├── deploy/helm/titanic-mcp/
+├── deploy/helm/database-mcp/
 ├── .devcontainer/
 ├── docs/{PLAN.md, adr/, ARCHITECTURE.md, SECURITY.md, RUNBOOK.md, AI_USAGE.md}
 ├── Dockerfile, docker-compose.yml, Makefile, .env.example, .gitattributes

@@ -12,9 +12,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from database_mcp.services.sql_guard import MAX_QUERY_LENGTH, SqlRejectedError, validate
+from database_mcp.services.sql_runner import SqlExecutionError, SqlRunner
 from tests.conftest import SQL, Database
-from titanic_mcp.services.sql_guard import MAX_QUERY_LENGTH, SqlRejectedError, validate
-from titanic_mcp.services.sql_runner import SqlExecutionError, SqlRunner
 
 ATTACKS = [
     # data or schema changes

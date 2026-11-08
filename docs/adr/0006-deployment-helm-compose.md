@@ -10,7 +10,7 @@ Arbeitszeit.
 
 ## Entscheidung
 
-- **Helm-Chart** `deploy/helm/titanic-mcp` mit gehärteten Defaults: 2 Replicas, eigener
+- **Helm-Chart** `deploy/helm/database-mcp` mit gehärteten Defaults: 2 Replicas, eigener
   ServiceAccount ohne Token, `securityContext` (non-root, read-only Root-FS, keine Capabilities,
   seccomp `RuntimeDefault`), Probes, Ressourcenlimits, PodDisruptionBudget, NetworkPolicy mit
   Default-Deny, `db-init` als Helm-Hook (pre-install, pre-upgrade), Secrets nur als

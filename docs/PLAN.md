@@ -1,4 +1,4 @@
-# Umsetzungsplan – Titanic MCP Server
+# Umsetzungsplan – Database MCP Server
 
 Regeln, Zielarchitektur und technische Details samt Begründungen stehen in `CLAUDE.md` im
 Projekt-Root. Der Plan beschreibt die Reihenfolge, die Aufgaben pro Etappe und wann eine Etappe
@@ -106,7 +106,7 @@ Sicherheits-Header – alles mit Eintrag im Ausblick.
 
 ### Etappe 1 – Grundgerüst und Datenbank (ca. 1,5 h)
 
-- `uv`-Projekt mit `src/`-Layout, Paket `titanic_mcp`, Python 3.14 (Begründung in `CLAUDE.md`)
+- `uv`-Projekt mit `src/`-Layout, Paket `database_mcp`, Python 3.14 (Begründung in `CLAUDE.md`)
 - `.devcontainer/` laut `CLAUDE.md` (docker-in-docker, Helm, kubeconform, uv; Port 8000
   weiterleiten)
 - `.gitattributes` (bereits vorab angelegt), `.gitignore` (inkl. `.env`)
@@ -211,7 +211,7 @@ Metriken erzeugt.
 - `scripts/smoke.py` und `make smoke`: verbindet sich per MCP-Client mit dem Compose-Stack
   (`localhost:8000`), ruft `describe_dataset`, `get_statistics` und `run_sql` auf, prüft einen
   abgelehnten Aufruf ohne Key
-- Helm-Chart `deploy/helm/titanic-mcp`:
+- Helm-Chart `deploy/helm/database-mcp`:
   - Deployment (2 Replicas, damit ein Pod-Neustart oder Node-Wechsel keinen Ausfall verursacht),
     Service (8000 MCP, 9090 Metriken), Ingress optional (aus; im README dokumentiert: TLS 1.3 bzw.
     TLS 1.2 mit PFS und Limit pro IP gehören dorthin)
@@ -424,7 +424,7 @@ stehen oben unter „Entscheidungen aus dem BSI-Abgleich“.
   nötig.
 - Schreibende Tools mit Berechtigungen pro Operation – von der Aufgabe nicht gefordert.
 - Secret-Scanning mit gitleaks (Pre-commit und CI) – aus Zeitgründen gestrichen; Ersatz: Hook
-  `detect-private-key`, das Key-Präfix `tmcp_` für Scanner der Plattform und gitignorierte
+  `detect-private-key`, das Key-Präfix `dbmcp_` für Scanner der Plattform und gitignorierte
   `.env`/`secrets/`.
 - Regelmäßiger Neustart der Pods (höchstens 24 h Laufzeit) [BSI APP.4.4.A21, erhöhter Schutzbedarf] –
   bei normalem Schutzbedarf nicht gefordert.

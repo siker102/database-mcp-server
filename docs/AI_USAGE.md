@@ -37,7 +37,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
     `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine` (im Dev Container nicht nötig).
   - Abweichung vom Plan: Migrationen liegen im Paket statt unter `migrations/`, damit sie im
     Image enthalten sind.
-- **Lesereihenfolge:** `src/titanic_mcp/config.py` → `db/schema.py` →
+- **Lesereihenfolge:** `src/database_mcp/config.py` → `db/schema.py` →
   `db/migrations/versions/0001_passengers.py` → `db/init_db.py` → `db/seed.py` →
   `tests/integration/test_db_init.py`.
 
@@ -87,7 +87,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
 ## Etappe 4 – Container, Helm-Chart, Ende-zu-Ende-Test und Abschluss
 
 - **Ziel:** Image, Compose-Stack mit Smoke-Test, Helm-Chart, CI-Prüfungen, Abschluss der Doku.
-- **Generiert:** `scripts/smoke.py`, `deploy/helm/titanic-mcp/` (Deployment, Service,
+- **Generiert:** `scripts/smoke.py`, `deploy/helm/database-mcp/` (Deployment, Service,
   ServiceAccounts, NetworkPolicies, PDB, db-init-Hook-Job, Ingress, ServiceMonitor,
   `values.schema.json`), ADR 0006, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `README.md`.
 - **Lokal verifiziert:** `docker compose up --build --wait` + `scripts/smoke.py` (alle 6 Prüfungen
@@ -110,7 +110,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   - `trivy config` bemängelte, dass das Dev-Container-Dockerfile als root endet; `USER vscode`
     ergänzt.
 - **Lesereihenfolge:** `Dockerfile` → `docker-compose.yml` → `scripts/smoke.py` →
-  `deploy/helm/titanic-mcp/values.yaml` → `templates/deployment.yaml` →
+  `deploy/helm/database-mcp/values.yaml` → `templates/deployment.yaml` →
   `templates/networkpolicy.yaml` → `templates/job-db-init.yaml` → `README.md` (Kubernetes) →
   `docs/RUNBOOK.md`.
 

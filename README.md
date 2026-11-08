@@ -1,4 +1,4 @@
-# Titanic MCP Server
+# Database MCP Server
 
 Ein MCP-Server (Model Context Protocol), über den AI-Agents anderer Teams **lesend** auf den
 Titanic-Datensatz zugreifen: vier feste Tools und – für berechtigte Agents – freies `SELECT` auf
@@ -244,9 +244,9 @@ PostgreSQL-Datenbank. Geprüft ist das Chart statisch (`helm lint --strict`, `ku
 ### 2. Image bauen und pushen
 
 ```bash
-docker build -t registry.example.com/titanic-mcp:0.1.0 .
-docker push registry.example.com/titanic-mcp:0.1.0
-docker buildx imagetools inspect registry.example.com/titanic-mcp:0.1.0   # Digest für image.digest
+docker build -t registry.example.com/database-mcp:0.1.0 .
+docker push registry.example.com/database-mcp:0.1.0
+docker buildx imagetools inspect registry.example.com/database-mcp:0.1.0   # Digest für image.digest
 ```
 
 ### 3. Datenbankrollen anlegen
@@ -274,7 +274,7 @@ warnt sonst und läuft weiter).
 ### 4. Namespace und Secrets anlegen
 
 ```bash
-kubectl create namespace titanic-mcp
+kubectl create namespace database-mcp
 ```
 
 DB-Passwörter (Variante A: nur die Passwörter der Rollen; `owner-password` braucht nur der Job).
@@ -282,7 +282,7 @@ Die Werte werden interaktiv gelesen, damit sie nicht in der Shell-Historie lande
 
 ```bash
 read -rs OWNER_PW && read -rs APP_PW && read -rs SQL_PW
-kubectl -n titanic-mcp create secret generic titanic-mcp-db \
+kubectl -n database-mcp create secret generic database-mcp-db \
   --from-literal=owner-password="$OWNER_PW" \
   --from-literal=app-password="$APP_PW" \
   --from-literal=sql-password="$SQL_PW"
@@ -295,7 +295,7 @@ der gesalzene Hash):
 ```bash
 uv run python scripts/generate_api_key.py --agent report-bot --team analytics --scopes read --days 365 --append api_keys.json
 uv run python scripts/generate_api_key.py --agent sql-bot --team data-science --scopes read,sql --days 365 --append api_keys.json
-kubectl -n titanic-mcp create secret generic titanic-mcp-api-keys --from-file=api_keys.json
+kubectl -n database-mcp create secret generic database-mcp-api-keys --from-file=api_keys.json
 shred -u api_keys.json
 ```
 
@@ -304,7 +304,7 @@ Zugangsdaten für eine private Registry (falls nötig; in `my-values.yaml` dann
 
 ```bash
 read -rs REGISTRY_TOKEN
-kubectl -n titanic-mcp create secret docker-registry registry-credentials \
+kubectl -n database-mcp create secret docker-registry registry-credentials \
   --docker-server=registry.example.com --docker-username=<user> --docker-password="$REGISTRY_TOKEN"
 unset REGISTRY_TOKEN
 ```
@@ -312,17 +312,17 @@ unset REGISTRY_TOKEN
 CA der Datenbank (falls nötig):
 
 ```bash
-kubectl -n titanic-mcp create secret generic titanic-mcp-db-ca --from-file=ca.crt=./db-ca.crt
+kubectl -n database-mcp create secret generic database-mcp-db-ca --from-file=ca.crt=./db-ca.crt
 ```
 
 ### 5. Values-Datei
 
-`my-values.yaml` (alle Optionen mit Erklärung: `deploy/helm/titanic-mcp/values.yaml`, Prüfung
+`my-values.yaml` (alle Optionen mit Erklärung: `deploy/helm/database-mcp/values.yaml`, Prüfung
 durch `values.schema.json`):
 
 ```yaml
 image:
-  repository: registry.example.com/titanic-mcp
+  repository: registry.example.com/database-mcp
   tag: "0.1.0"
   digest: "sha256:<digest aus Schritt 2>"
 database:
@@ -330,14 +330,14 @@ database:
   port: 5432
   name: titanic
   sslmode: verify-full
-  caSecret: titanic-mcp-db-ca
+  caSecret: database-mcp-db-ca
 dbInit:
   createRoles: false
 ingress:
   enabled: true
   className: <ingress-class>
-  host: titanic-mcp.example.com
-  tlsSecretName: titanic-mcp-tls
+  host: database-mcp.example.com
+  tlsSecretName: database-mcp-tls
 networkPolicy:
   ingressNamespace: <namespace des Ingress-Controllers>
   monitoringNamespace: monitoring
@@ -349,23 +349,23 @@ serviceMonitor:
 ### 6. Installieren
 
 ```bash
-helm upgrade --install titanic-mcp deploy/helm/titanic-mcp -n titanic-mcp -f my-values.yaml --wait
+helm upgrade --install database-mcp deploy/helm/database-mcp -n database-mcp -f my-values.yaml --wait
 ```
 
-Vor dem Deployment läuft der Job `titanic-mcp-db-init` (Helm-Hook pre-install/pre-upgrade).
+Vor dem Deployment läuft der Job `database-mcp-db-init` (Helm-Hook pre-install/pre-upgrade).
 
 ### 7. Prüfen
 
 ```bash
-kubectl -n titanic-mcp rollout status deployment/titanic-mcp
-kubectl -n titanic-mcp get pods,networkpolicy,pdb
-kubectl -n titanic-mcp logs deploy/titanic-mcp | head
+kubectl -n database-mcp rollout status deployment/database-mcp
+kubectl -n database-mcp get pods,networkpolicy,pdb
+kubectl -n database-mcp logs deploy/database-mcp | head
 ```
 
 Health-Routen (nicht über den Ingress veröffentlicht) per Port-Forward:
 
 ```bash
-kubectl -n titanic-mcp port-forward svc/titanic-mcp 8000:8000
+kubectl -n database-mcp port-forward svc/database-mcp 8000:8000
 curl -s http://localhost:8000/healthz   # {"status":"ok"}
 curl -s http://localhost:8000/readyz    # {"status":"ok"} wenn die DB erreichbar ist
 ```
@@ -374,7 +374,7 @@ Smoke-Test über den Ingress mit einem Key, der alle Scopes hat (z. B. eigens f�
 und danach widerrufen):
 
 ```bash
-uv run python scripts/smoke.py --url https://titanic-mcp.example.com/mcp --key-file ./smoke-key.txt
+uv run python scripts/smoke.py --url https://database-mcp.example.com/mcp --key-file ./smoke-key.txt
 ```
 
 Key-Rotation, Widerruf, regelmäßige Überprüfung der Scopes, Logs, Metriken und typische Fehler:
@@ -400,29 +400,29 @@ Protokoll: MCP-Revision 2026-07-28 (zustandslos) sowie über den Handshake 2024-
 
 ## Konfiguration
 
-Alle Werte über Umgebungsvariablen mit Präfix `TMCP_` (Vorlage: `.env.example`). Secrets haben
+Alle Werte über Umgebungsvariablen mit Präfix `DBMCP_` (Vorlage: `.env.example`). Secrets haben
 keine Defaults; bei ungültiger Konfiguration bricht der Start mit den Feldnamen ab.
 
 | Variable | Default | Bedeutung |
 |---|---|---|
-| `TMCP_DB_HOST` | – (Pflicht) | Datenbank-Host |
-| `TMCP_DB_PORT` / `TMCP_DB_NAME` | `5432` / `titanic` | Port, Datenbankname |
-| `TMCP_DB_SSLMODE` | `verify-full` | `disable`, `require`, `verify-ca`, `verify-full` (`prefer` gibt es bewusst nicht) |
-| `TMCP_DB_SSLROOTCERT` | System-CAs | CA-Datei des DB-Zertifikats |
-| `TMCP_DB_APP_USER` / `TMCP_DB_APP_PASSWORD` | `titanic_app` / – (Pflicht) | Rolle der festen Tools |
-| `TMCP_DB_SQL_USER` / `TMCP_DB_SQL_PASSWORD` | `titanic_sql` / – (Pflicht) | Rolle von `run_sql` |
-| `TMCP_DB_OWNER_USER` / `TMCP_DB_OWNER_PASSWORD` | `titanic_owner` / – (Pflicht für `db-init`) | Owner-Rolle, nur `db-init` |
-| `TMCP_DATA_FILE` | `data/titanic.csv` | CSV für den Seed |
-| `TMCP_API_KEYS_FILE` | – (Pflicht) | Pfad zur Key-Datei |
-| `TMCP_HOST` / `TMCP_PORT` | `127.0.0.1` / `8000` | Bind-Adresse (im Container `0.0.0.0` setzen) und Port |
-| `TMCP_METRICS_PORT` | `9090` | Prometheus-Endpunkt |
-| `TMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `TMCP_ALLOWED_HOSTS` | `["localhost:*","127.0.0.1:*"]` | Erlaubte `Host`-Header auf `/mcp` (JSON-Liste) |
-| `TMCP_ALLOWED_ORIGINS` | `[]` | Erlaubte `Origin`-Header (Browser) |
-| `TMCP_RATE_LIMIT_PER_MINUTE` / `TMCP_RATE_LIMIT_BURST` | `60` / `20` | Token-Bucket pro Key und Pod |
-| `TMCP_SQL_TIMEOUT_SECONDS` | `5` | Timeout für `run_sql` (max. 30) |
-| `TMCP_SQL_MAX_CONCURRENCY` | `4` | Parallele `run_sql`-Abfragen pro Pod |
-| `TMCP_CLIENT_IP_HEADER` | `x-forwarded-for` | Header mit der Client-IP (nur für Logs) |
+| `DBMCP_DB_HOST` | – (Pflicht) | Datenbank-Host |
+| `DBMCP_DB_PORT` / `DBMCP_DB_NAME` | `5432` / `titanic` | Port, Datenbankname |
+| `DBMCP_DB_SSLMODE` | `verify-full` | `disable`, `require`, `verify-ca`, `verify-full` (`prefer` gibt es bewusst nicht) |
+| `DBMCP_DB_SSLROOTCERT` | System-CAs | CA-Datei des DB-Zertifikats |
+| `DBMCP_DB_APP_USER` / `DBMCP_DB_APP_PASSWORD` | `titanic_app` / – (Pflicht) | Rolle der festen Tools |
+| `DBMCP_DB_SQL_USER` / `DBMCP_DB_SQL_PASSWORD` | `titanic_sql` / – (Pflicht) | Rolle von `run_sql` |
+| `DBMCP_DB_OWNER_USER` / `DBMCP_DB_OWNER_PASSWORD` | `titanic_owner` / – (Pflicht für `db-init`) | Owner-Rolle, nur `db-init` |
+| `DBMCP_DATA_FILE` | `data/titanic.csv` | CSV für den Seed |
+| `DBMCP_API_KEYS_FILE` | – (Pflicht) | Pfad zur Key-Datei |
+| `DBMCP_HOST` / `DBMCP_PORT` | `127.0.0.1` / `8000` | Bind-Adresse (im Container `0.0.0.0` setzen) und Port |
+| `DBMCP_METRICS_PORT` | `9090` | Prometheus-Endpunkt |
+| `DBMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `DBMCP_ALLOWED_HOSTS` | `["localhost:*","127.0.0.1:*"]` | Erlaubte `Host`-Header auf `/mcp` (JSON-Liste) |
+| `DBMCP_ALLOWED_ORIGINS` | `[]` | Erlaubte `Origin`-Header (Browser) |
+| `DBMCP_RATE_LIMIT_PER_MINUTE` / `DBMCP_RATE_LIMIT_BURST` | `60` / `20` | Token-Bucket pro Key und Pod |
+| `DBMCP_SQL_TIMEOUT_SECONDS` | `5` | Timeout für `run_sql` (max. 30) |
+| `DBMCP_SQL_MAX_CONCURRENCY` | `4` | Parallele `run_sql`-Abfragen pro Pod |
+| `DBMCP_CLIENT_IP_HEADER` | `x-forwarded-for` | Header mit der Client-IP (nur für Logs) |
 
 ## Architektur
 

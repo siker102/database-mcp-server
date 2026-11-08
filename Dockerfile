@@ -34,9 +34,9 @@ COPY data/titanic.csv /app/data/titanic.csv
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TMCP_DATA_FILE=/app/data/titanic.csv
+    DBMCP_DATA_FILE=/app/data/titanic.csv
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8000 9090
-ENTRYPOINT ["titanic-mcp"]
+ENTRYPOINT ["database-mcp"]
 CMD ["serve"]

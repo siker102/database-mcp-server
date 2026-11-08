@@ -16,8 +16,8 @@ sein, dass er auch für echte, sensible Daten taugt. Zielplattform ist Kubernete
   - `titanic_sql` liest **nur** die View `passengers_public` (freies SQL).
 - **View ohne `security_invoker`**: Sie läuft mit den Rechten des Owners, deshalb braucht
   `titanic_sql` keinerlei Recht auf die Basistabelle.
-- **Alembic** für das Schema; die Migrationen liegen im Paket (`src/titanic_mcp/db/migrations`),
-  damit sie im Image enthalten sind. Ausgeführt werden sie nur über `titanic-mcp db-init`, das die
+- **Alembic** für das Schema; die Migrationen liegen im Paket (`src/database_mcp/db/migrations`),
+  damit sie im Image enthalten sind. Ausgeführt werden sie nur über `database-mcp db-init`, das die
   Verbindung übergibt – keine Zugangsdaten in einer Konfigurationsdatei.
 - **`db-init`** als eigener Schritt (Compose-Service, später Helm-Hook-Job): Migrationen, Rollen
   (optional, `--create-roles`), Rechte, idempotenter Seed. Jede Zeile wird vor dem Schreiben mit

@@ -1,12 +1,12 @@
 # Local stack: PostgreSQL, one-off db-init, MCP server. Development only (see CLAUDE.md).
 # Secrets come from .env (created by `make up`); there are no defaults in this file.
-name: titanic-mcp
+name: database-mcp
 
 x-db-env: &db-env
-  TMCP_DB_HOST: postgres
-  TMCP_DB_NAME: titanic
+  DBMCP_DB_HOST: postgres
+  DBMCP_DB_NAME: titanic
   # Explicitly insecure for the local stack only; the application default is verify-full.
-  TMCP_DB_SSLMODE: disable
+  DBMCP_DB_SSLMODE: disable
 
 services:
   postgres:
@@ -14,7 +14,7 @@ services:
     environment:
       POSTGRES_DB: titanic
       POSTGRES_USER: titanic_owner
-      POSTGRES_PASSWORD: ${TMCP_DB_OWNER_PASSWORD:?run make up to create .env}
+      POSTGRES_PASSWORD: ${DBMCP_DB_OWNER_PASSWORD:?run make up to create .env}
     ports:
       - "127.0.0.1:5432:5432" # only reachable from this machine
     volumes:
@@ -30,10 +30,10 @@ services:
     command: ["db-init", "--create-roles"]
     environment:
       <<: *db-env
-      TMCP_DB_OWNER_PASSWORD: ${TMCP_DB_OWNER_PASSWORD:?}
-      TMCP_DB_APP_PASSWORD: ${TMCP_DB_APP_PASSWORD:?}
-      TMCP_DB_SQL_PASSWORD: ${TMCP_DB_SQL_PASSWORD:?}
-      TMCP_DATA_FILE: /app/data/titanic.csv
+      DBMCP_DB_OWNER_PASSWORD: ${DBMCP_DB_OWNER_PASSWORD:?}
+      DBMCP_DB_APP_PASSWORD: ${DBMCP_DB_APP_PASSWORD:?}
+      DBMCP_DB_SQL_PASSWORD: ${DBMCP_DB_SQL_PASSWORD:?}
+      DBMCP_DATA_FILE: /app/data/titanic.csv
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,10 +44,10 @@ services:
     command: ["serve"]
     environment:
       <<: *db-env
-      TMCP_HOST: 0.0.0.0
-      TMCP_DB_APP_PASSWORD: ${TMCP_DB_APP_PASSWORD:?}
-      TMCP_DB_SQL_PASSWORD: ${TMCP_DB_SQL_PASSWORD:?}
-      TMCP_API_KEYS_FILE: /run/secrets/api_keys.json
+      DBMCP_HOST: 0.0.0.0
+      DBMCP_DB_APP_PASSWORD: ${DBMCP_DB_APP_PASSWORD:?}
+      DBMCP_DB_SQL_PASSWORD: ${DBMCP_DB_SQL_PASSWORD:?}
+      DBMCP_API_KEYS_FILE: /run/secrets/api_keys.json
     volumes:
       - ./secrets/api_keys.json:/run/secrets/api_keys.json:ro
     ports:

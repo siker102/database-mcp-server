@@ -12,13 +12,13 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from titanic_mcp.config import DatabaseSettings
-from titanic_mcp.db.engine import create_engine
-from titanic_mcp.db.init_db import RoleSpec, run_db_init
+from database_mcp.config import DatabaseSettings
+from database_mcp.db.engine import create_engine
+from database_mcp.db.init_db import RoleSpec, run_db_init
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "titanic.csv"
-POSTGRES_IMAGE = os.environ.get("TMCP_TEST_POSTGRES_IMAGE", "postgres:17-alpine")
+POSTGRES_IMAGE = os.environ.get("DBMCP_TEST_POSTGRES_IMAGE", "postgres:17-alpine")
 
 OWNER = ("titanic_owner", SecretStr("owner-test-pw"))
 APP = ("titanic_app", SecretStr("app-test-pw"))

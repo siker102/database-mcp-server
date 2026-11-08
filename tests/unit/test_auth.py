@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from titanic_mcp.auth import (
+from database_mcp.auth import (
     ApiKeyEntry,
     ApiKeyVerifier,
     KeyConfigError,
@@ -32,7 +32,7 @@ def _write(path: Path, entries: list[ApiKeyEntry]) -> Path:
 
 def test_generated_key_matches_its_entry() -> None:
     key = generate_key(agent="bot", team="a", scopes={Scope.READ}, days=30)
-    key_id, secret = key.token.removeprefix("tmcp_").split("_", 1)
+    key_id, secret = key.token.removeprefix("dbmcp_").split("_", 1)
     assert key_id == key.entry.key_id
     assert hash_secret(key.entry.salt, secret) == key.entry.sha256
     assert len(secret) >= 43  # 32 bytes, url-safe base64

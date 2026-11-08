@@ -7,7 +7,7 @@
 Agent ──HTTPS──▶ Ingress (TLS 1.3/1.2+PFS, Limit pro IP)
                     │  (mTLS über Service Mesh, Anforderung an die Plattform – Abweichung A1)
                     ▼
-        ┌──────────────────────── Pod titanic-mcp (2 Replicas) ────────────────────────┐
+        ┌──────────────────────── Pod database-mcp (2 Replicas) ────────────────────────┐
         │ RequestContextMiddleware   request_id, Client-IP, Sicherheits-Header        │
         │ AuthenticationMiddleware   SDK + ApiKeyVerifier (gesalzener SHA-256, Ablauf)   │
         │ RequireAuthMiddleware      SDK: 401 ohne gültigen Key       (/mcp)            │

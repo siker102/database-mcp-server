@@ -1,6 +1,6 @@
 {
   // Dev container for Windows (Docker Desktop) and GitHub Codespaces. See ADR 0007.
-  "name": "titanic-mcp",
+  "name": "database-mcp",
   "build": { "dockerfile": "Dockerfile" },
   "features": {
     // Official features from github.com/devcontainers/features, pinned to exact versions.

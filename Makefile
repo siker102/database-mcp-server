@@ -5,7 +5,7 @@ SHELL := /bin/bash
 
 UV ?= uv
 COMPOSE ?= docker compose
-CHART := deploy/helm/titanic-mcp
+CHART := deploy/helm/database-mcp
 KUBE_VERSION ?= 1.33.0
 
 .PHONY: help install fmt lint typecheck test check helm-check up down smoke db-init run docker-build
@@ -32,7 +32,7 @@ test: ## Unit, integration and security tests with coverage (needs Docker)
 
 helm-check: ## Lint the Helm chart and validate the rendered manifests against the K8s schema
 	helm lint $(CHART) --strict
-	helm template titanic-mcp $(CHART) | kubeconform -strict -summary -kubernetes-version $(KUBE_VERSION)
+	helm template database-mcp $(CHART) | kubeconform -strict -summary -kubernetes-version $(KUBE_VERSION)
 
 check: lint typecheck test helm-check ## Everything that must be green before a commit
 
@@ -50,7 +50,7 @@ db-init: ## Run db-init once more against the Compose database
 	$(COMPOSE) run --rm db-init
 
 run: ## Run the server locally (needs a running database and a filled .env)
-	set -a && source .env && set +a && $(UV) run titanic-mcp serve
+	set -a && source .env && set +a && $(UV) run database-mcp serve
 
 docker-build: ## Build the server image
-	docker build -t titanic-mcp:local .
+	docker build -t database-mcp:local .

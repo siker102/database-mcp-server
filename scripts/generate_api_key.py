@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from titanic_mcp.auth import MAX_LIFETIME, Scope, entry_to_json, generate_key
+from database_mcp.auth import MAX_LIFETIME, Scope, entry_to_json, generate_key
 
 
 def main() -> int:

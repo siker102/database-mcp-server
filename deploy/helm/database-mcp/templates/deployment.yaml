@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "database-mcp.fullname" . }}
+  labels:
+    {{- include "database-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "database-mcp.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "database-mcp.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "database-mcp.fullname" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: {{ include "database-mcp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          securityContext:
+            {{- include "database-mcp.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: 9090
+          env:
+            {{- include "database-mcp.dbEnv" . | nindent 12 }}
+            - name: DBMCP_HOST
+              value: "0.0.0.0"
+            - name: DBMCP_API_KEYS_FILE
+              value: /etc/database-mcp/keys/api_keys.json
+            - name: DBMCP_LOG_LEVEL
+              value: {{ .Values.server.logLevel | quote }}
+            - name: DBMCP_ALLOWED_HOSTS
+              value: {{ concat .Values.server.allowedHosts (ternary (list .Values.ingress.host) (list) .Values.ingress.enabled) | toJson | quote }}
+            - name: DBMCP_ALLOWED_ORIGINS
+              value: {{ .Values.server.allowedOrigins | toJson | quote }}
+            - name: DBMCP_RATE_LIMIT_PER_MINUTE
+              value: {{ .Values.server.rateLimitPerMinute | quote }}
+            - name: DBMCP_RATE_LIMIT_BURST
+              value: {{ .Values.server.rateLimitBurst | quote }}
+            - name: DBMCP_SQL_TIMEOUT_SECONDS
+              value: {{ .Values.server.sqlTimeoutSeconds | quote }}
+            - name: DBMCP_SQL_MAX_CONCURRENCY
+              value: {{ .Values.server.sqlMaxConcurrency | quote }}
+            - name: DBMCP_CLIENT_IP_HEADER
+              value: {{ .Values.server.clientIpHeader | quote }}
+          volumeMounts:
+            - name: api-keys
+              mountPath: /etc/database-mcp/keys
+              readOnly: true
+            {{- if .Values.database.caSecret }}
+            - name: db-ca
+              mountPath: /etc/database-mcp/db-ca
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          # Liveness without DB, readiness with DB ping [BSI APP.4.4.A11].
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: api-keys
+          secret:
+            secretName: {{ .Values.existingSecrets.apiKeys }}
+            items:
+              - key: api_keys.json
+                path: api_keys.json
+        {{- if .Values.database.caSecret }}
+        - name: db-ca
+          secret:
+            secretName: {{ .Values.database.caSecret }}
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

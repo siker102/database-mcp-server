@@ -17,10 +17,10 @@ from mcp.client.streamable_http import streamable_http_client
 from prometheus_client import REGISTRY
 from starlette.applications import Starlette
 
+from database_mcp.app import create_app
+from database_mcp.auth import Scope, entry_to_json, generate_key
+from database_mcp.config import ServerSettings
 from tests.conftest import APP, SQL, Database
-from titanic_mcp.app import create_app
-from titanic_mcp.auth import Scope, entry_to_json, generate_key
-from titanic_mcp.config import ServerSettings
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
@@ -180,7 +180,7 @@ async def test_describe_dataset(server: Server) -> None:
     assert columns["fare"]["personal_data"] is False
 
 
-@pytest.mark.parametrize("header", [None, "Bearer wrong", "Bearer tmcp_abcdefgh_" + "x" * 43])
+@pytest.mark.parametrize("header", [None, "Bearer wrong", "Bearer dbmcp_abcdefgh_" + "x" * 43])
 async def test_missing_or_wrong_key_is_401(server: Server, header: str | None) -> None:
     async with httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=server.app), base_url=BASE
@@ -189,7 +189,7 @@ async def test_missing_or_wrong_key_is_401(server: Server, header: str | None) -
         response = await http.post("/mcp", json={}, headers=headers)
     assert response.status_code == 401
     assert response.headers["www-authenticate"].startswith("Bearer")
-    assert "tmcp_" not in response.text
+    assert "dbmcp_" not in response.text
 
 
 async def test_health_endpoints_need_no_key(server: Server) -> None:

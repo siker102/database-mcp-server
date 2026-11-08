@@ -49,7 +49,7 @@ BSI-Konformität: Eine Zertifizierung setzt ein ISMS der Organisation voraus. Qu
 | DET.3.3 | Keine unnötigen Inhalte im Log | PII-Parameter maskiert, keine Ergebnisdaten | `observability.mask_parameters` |
 | SYS.1.6.A7 | Logs außerhalb des Containers | JSON auf stdout | `observability.configure_logging` |
 | SYS.1.6.A6, A17, A23 | Sichere Images, ohne Privilegien, unveränderlich | Offizielles Basis-Image per Digest, UID 10001, read-only Root-FS | `Dockerfile`, Helm-Chart |
-| APP.4.4.A7, A9, A11 | Netztrennung, ServiceAccounts, Probes | NetworkPolicy, eigener SA ohne Token, Probes | `deploy/helm/titanic-mcp` |
+| APP.4.4.A7, A9, A11 | Netztrennung, ServiceAccounts, Probes | NetworkPolicy, eigener SA ohne Token, Probes | `deploy/helm/database-mcp` |
 | DEV.4.3, TR-03183-2 | SBOM | CycloneDX in der CI | `.github/workflows/ci.yml` |
 | TEST.3.1, TEST.3.2 | Sicherheitstests, Testabdeckung | `tests/security/`, Coverage ≥ 85 % | `pyproject.toml` |
 

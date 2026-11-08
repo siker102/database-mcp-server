@@ -1,7 +1,7 @@
 [project]
-name = "titanic-mcp"
+name = "database-mcp"
 version = "0.1.0"
-description = "Read-only MCP server that lets AI agents query the Titanic dataset securely."
+description = "Read-only MCP server that lets AI agents query a PostgreSQL database securely (demo dataset: Titanic)."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-titanic-mcp = "titanic_mcp.cli:main"
+database-mcp = "database_mcp.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13,<0.14"]
@@ -56,7 +56,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Tests use assert by design and do not need docstrings on every helper.
 "tests/**" = ["S101", "D", "S105", "S106", "S608"]
-"src/titanic_mcp/db/migrations/**" = ["D", "INP001"]
+"src/database_mcp/db/migrations/**" = ["D", "INP001"]
 "scripts/**" = ["T20"]
 
 [tool.mypy]
@@ -64,8 +64,8 @@ strict = true
 python_version = "3.14"
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
-packages = ["titanic_mcp"]
-exclude = ["src/titanic_mcp/db/migrations/"]
+packages = ["database_mcp"]
+exclude = ["src/database_mcp/db/migrations/"]
 
 [[tool.mypy.overrides]]
 module = ["testcontainers.*", "asyncpg.*"]
@@ -73,11 +73,11 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov=titanic_mcp --cov-report=term-missing --cov-fail-under=85"
+addopts = "--strict-markers --cov=database_mcp --cov-report=term-missing --cov-fail-under=85"
 markers = [
     "integration: needs Docker (testcontainers)",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["titanic_mcp"]
+source = ["database_mcp"]

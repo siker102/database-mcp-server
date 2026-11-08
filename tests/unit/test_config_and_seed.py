@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from database_mcp.cli import main
+from database_mcp.config import DatabaseSettings, ServerSettings
+from database_mcp.db.seed import SeedError, read_rows
 from tests.conftest import DATA_FILE
-from titanic_mcp.cli import main
-from titanic_mcp.config import DatabaseSettings, ServerSettings
-from titanic_mcp.db.seed import SeedError, read_rows
 
 ENV = {
-    "TMCP_DB_APP_PASSWORD": "app-secret-value",
-    "TMCP_DB_SQL_PASSWORD": "y",
-    "TMCP_API_KEYS_FILE": "keys.json",
+    "DBMCP_DB_APP_PASSWORD": "app-secret-value",
+    "DBMCP_DB_SQL_PASSWORD": "y",
+    "DBMCP_API_KEYS_FILE": "keys.json",
 }
 
 
@@ -27,28 +27,28 @@ def test_server_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_missing_secret_stops_start(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TMCP_DB_APP_PASSWORD", raising=False)
-    monkeypatch.setenv("TMCP_DB_SQL_PASSWORD", "y")
-    monkeypatch.setenv("TMCP_API_KEYS_FILE", "k.json")
+    monkeypatch.delenv("DBMCP_DB_APP_PASSWORD", raising=False)
+    monkeypatch.setenv("DBMCP_DB_SQL_PASSWORD", "y")
+    monkeypatch.setenv("DBMCP_API_KEYS_FILE", "k.json")
     with pytest.raises(ValidationError):
         ServerSettings()
 
 
 def test_database_defaults_to_verify_full(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TMCP_DB_HOST", "db")
+    monkeypatch.setenv("DBMCP_DB_HOST", "db")
     assert DatabaseSettings().sslmode == "verify-full"
 
 
 def test_invalid_sslmode_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TMCP_DB_HOST", "db")
-    monkeypatch.setenv("TMCP_DB_SSLMODE", "prefer")  # libpq's silent downgrade mode
+    monkeypatch.setenv("DBMCP_DB_HOST", "db")
+    monkeypatch.setenv("DBMCP_DB_SSLMODE", "prefer")  # libpq's silent downgrade mode
     with pytest.raises(ValidationError):
         DatabaseSettings()
 
 
 def test_cli_reports_invalid_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TMCP_DB_OWNER_PASSWORD", raising=False)
-    monkeypatch.delenv("TMCP_DB_HOST", raising=False)
+    monkeypatch.delenv("DBMCP_DB_OWNER_PASSWORD", raising=False)
+    monkeypatch.delenv("DBMCP_DB_HOST", raising=False)
     assert main(["db-init"]) == 2
 
 

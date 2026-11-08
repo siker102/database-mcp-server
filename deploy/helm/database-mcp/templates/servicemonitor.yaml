@@ -1,0 +1,15 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "database-mcp.fullname" . }}
+  labels:
+    {{- include "database-mcp.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "database-mcp.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

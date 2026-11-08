@@ -1,20 +1,20 @@
 # Runbook
 
-Betriebsabläufe für titanic-mcp. Installation siehe README, Abschnitt „Integration in einen
+Betriebsabläufe für database-mcp. Installation siehe README, Abschnitt „Integration in einen
 Kubernetes-Cluster“.
 
 ## Deployment und Update
 
 ```bash
-helm upgrade --install titanic-mcp deploy/helm/titanic-mcp -n titanic-mcp -f my-values.yaml --wait
-kubectl -n titanic-mcp rollout status deployment/titanic-mcp
+helm upgrade --install database-mcp deploy/helm/database-mcp -n database-mcp -f my-values.yaml --wait
+kubectl -n database-mcp rollout status deployment/database-mcp
 ```
 
-Vor jedem Update läuft der Job `titanic-mcp-db-init` (Helm-Hook). Er ist idempotent; schlägt er
+Vor jedem Update läuft der Job `database-mcp-db-init` (Helm-Hook). Er ist idempotent; schlägt er
 fehl, bricht `helm upgrade` ab und die alte Version läuft weiter. Logs:
-`kubectl -n titanic-mcp logs job/titanic-mcp-db-init` (der Job wird nach Erfolg gelöscht).
+`kubectl -n database-mcp logs job/database-mcp-db-init` (der Job wird nach Erfolg gelöscht).
 
-Rollback: `helm -n titanic-mcp rollback titanic-mcp <revision>`.
+Rollback: `helm -n database-mcp rollback database-mcp <revision>`.
 
 ## API-Keys
 
@@ -22,10 +22,10 @@ Rollback: `helm -n titanic-mcp rollback titanic-mcp <revision>`.
 [BSI BER.4.3]):
 
 ```bash
-kubectl -n titanic-mcp get secret titanic-mcp-api-keys -o jsonpath='{.data.api_keys\.json}' | base64 -d > api_keys.json
+kubectl -n database-mcp get secret database-mcp-api-keys -o jsonpath='{.data.api_keys\.json}' | base64 -d > api_keys.json
 uv run python scripts/generate_api_key.py --agent report-bot --team analytics --scopes read --days 365 --append api_keys.json
-kubectl -n titanic-mcp create secret generic titanic-mcp-api-keys --from-file=api_keys.json --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n titanic-mcp rollout restart deployment/titanic-mcp
+kubectl -n database-mcp create secret generic database-mcp-api-keys --from-file=api_keys.json --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n database-mcp rollout restart deployment/database-mcp
 shred -u api_keys.json   # lokale Kopie löschen
 ```
 
@@ -50,13 +50,13 @@ abgleichen: Wird der Agent noch genutzt? Ist `pii` bzw. `sql` noch erforderlich?
   Danach einmalig als Superuser: `ALTER ROLE titanic_sql SET temp_file_limit = '64MB';` sowie
   `ALTER ROLE titanic_sql SET statement_timeout = '5s';` und
   `ALTER ROLE titanic_sql SET default_transaction_read_only = on;`.
-- DB-Passwort ändern: Passwort in der Datenbank setzen, Secret `titanic-mcp-db` ersetzen,
+- DB-Passwort ändern: Passwort in der Datenbank setzen, Secret `database-mcp-db` ersetzen,
   `kubectl rollout restart`.
 - Eine Datensicherung ist nicht nötig: Die Daten sind statisch und werden aus dem Image neu geladen.
 
 ## Logs und Metriken
 
-- Logs: JSON auf stdout, `kubectl -n titanic-mcp logs deploy/titanic-mcp`. Wichtige Events:
+- Logs: JSON auf stdout, `kubectl -n database-mcp logs deploy/database-mcp`. Wichtige Events:
   `audit` (jeder Tool-Aufruf), `auth_success`, `auth_failure` (mit `reason`), `scope_denied`,
   `rate_limited`, `sql_failed`, `tool_failed`, `readiness_failed`.
 - Audit-Events (`event=audit`) in der Log-Plattform in einen eigenen Index mit eingeschränkten
