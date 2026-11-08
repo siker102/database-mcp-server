@@ -1,0 +1,68 @@
+# Local stack: PostgreSQL, one-off db-init, MCP server. Development only (see CLAUDE.md).
+# Secrets come from .env (created by `make up`); there are no defaults in this file.
+name: titanic-mcp
+
+x-db-env: &db-env
+  TMCP_DB_HOST: postgres
+  TMCP_DB_NAME: titanic
+  # Explicitly insecure for the local stack only; the application default is verify-full.
+  TMCP_DB_SSLMODE: disable
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    environment:
+      POSTGRES_DB: titanic
+      POSTGRES_USER: titanic_owner
+      POSTGRES_PASSWORD: ${TMCP_DB_OWNER_PASSWORD:?run make up to create .env}
+    ports:
+      - "127.0.0.1:5432:5432" # only reachable from this machine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U titanic_owner -d titanic"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  db-init:
+    build: .
+    command: ["db-init", "--create-roles"]
+    environment:
+      <<: *db-env
+      TMCP_DB_OWNER_PASSWORD: ${TMCP_DB_OWNER_PASSWORD:?}
+      TMCP_DB_APP_PASSWORD: ${TMCP_DB_APP_PASSWORD:?}
+      TMCP_DB_SQL_PASSWORD: ${TMCP_DB_SQL_PASSWORD:?}
+      TMCP_DATA_FILE: /app/data/titanic.csv
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    build: .
+    command: ["serve"]
+    environment:
+      <<: *db-env
+      TMCP_HOST: 0.0.0.0
+      TMCP_DB_APP_PASSWORD: ${TMCP_DB_APP_PASSWORD:?}
+      TMCP_DB_SQL_PASSWORD: ${TMCP_DB_SQL_PASSWORD:?}
+      TMCP_API_KEYS_FILE: /run/secrets/api_keys.json
+    volumes:
+      - ./secrets/api_keys.json:/run/secrets/api_keys.json:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
