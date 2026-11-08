@@ -66,3 +66,20 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `tests/integration/test_mcp_http.py`.
 
 ### Review und Anpassungen durch mich
+
+## Etappe 3 – SQL-Tool und Härtung
+
+- **Ziel:** `run_sql` mit Defense in Depth und Angriffs-Tests pro Schicht.
+- **Generiert:** `services/sql_guard.py`, `services/sql_runner.py`, Tool `run_sql`,
+  `tests/security/test_sql_attacks.py` (40 Angriffs-Queries gegen den Validator, gültige Queries,
+  Rolle ohne Validator, `NullPool`-Test, Timeout, Truncation), ADR 0004, `docs/SECURITY.md`.
+- **Fehler / falsche Annahmen der KI:**
+  - Fehler beim Streamen von Zeilen kommen als rohe asyncpg-Exception, nicht als SQLAlchemy
+    `DBAPIError`; ein Timeout wäre sonst als unerwarteter Fehler beim Agent angekommen. Der Runner
+    behandelt jetzt beide.
+  - `text()` von SQLAlchemy liest `:name` im SQL des Agents als Bind-Parameter; Doppelpunkte werden
+    vor der Ausführung maskiert (Test mit `'a:b'`).
+- **Lesereihenfolge:** `services/sql_guard.py` → `services/sql_runner.py` →
+  `tests/security/test_sql_attacks.py` → `docs/adr/0004-...` → `docs/SECURITY.md`.
+
+### Review und Anpassungen durch mich
