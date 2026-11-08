@@ -17,6 +17,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
+import asyncpg
 import structlog
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -55,10 +56,15 @@ def _json_value(value: Any) -> Any:
     return value
 
 
-def _explain_db_error(exc: DBAPIError) -> str:
-    """Map database errors to messages that help the agent but reveal no internals."""
-    sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(
-        getattr(exc.orig, "__cause__", None), "sqlstate", None
+def _explain_db_error(exc: Exception) -> str:
+    """Map database errors to messages that help the agent but reveal no internals.
+
+    Errors arrive wrapped by SQLAlchemy (``DBAPIError.orig``) or, while streaming rows, as the
+    raw asyncpg exception; both carry the SQLSTATE code.
+    """
+    orig = getattr(exc, "orig", None) or exc
+    sqlstate = getattr(orig, "sqlstate", None) or getattr(
+        getattr(orig, "__cause__", None), "sqlstate", None
     )
     if sqlstate == "57014":
         return "Query cancelled: it exceeded the time limit."
@@ -69,7 +75,8 @@ def _explain_db_error(exc: DBAPIError) -> str:
     if sqlstate and sqlstate.startswith(("42", "22")):
         # Syntax, unknown column or bad value: the message only names parts of the agent's own
         # query, so it is safe and helps the agent to fix it.
-        detail = str(getattr(exc.orig, "args", [""])[0]).splitlines()[0][:200]
+        args = getattr(orig, "args", None) or [""]
+        detail = str(args[0]).splitlines()[0][:200]
         return f"Query error: {detail}"
     return "Query failed in the database."
 
@@ -100,7 +107,8 @@ class SqlRunner:
                     return await self._execute(statement, limit, timeout_ms)
             except TimeoutError as exc:
                 raise SqlExecutionError("Query cancelled: it exceeded the time limit.") from exc
-            except DBAPIError as exc:
+            except (DBAPIError, asyncpg.PostgresError) as exc:
+                log.info("sql_failed", sqlstate=getattr(exc, "sqlstate", None))
                 raise SqlExecutionError(_explain_db_error(exc)) from exc
 
     async def _execute(self, statement: str, limit: int, timeout_ms: int) -> SqlResult:

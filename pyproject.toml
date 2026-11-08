@@ -68,7 +68,7 @@ packages = ["titanic_mcp"]
 exclude = ["src/titanic_mcp/db/migrations/"]
 
 [[tool.mypy.overrides]]
-module = ["testcontainers.*"]
+module = ["testcontainers.*", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
