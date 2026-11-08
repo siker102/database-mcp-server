@@ -223,7 +223,7 @@ async def test_wrong_host_header_is_rejected(server: Server) -> None:
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
             headers={"accept": "application/json, text/event-stream"},
         )
-    assert response.status_code in (400, 403, 421)
+    assert response.status_code == 421
 
 
 async def test_rate_limit_answers_429(database: Database, tmp_path: Path) -> None:
