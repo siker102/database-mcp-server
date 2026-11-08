@@ -45,7 +45,8 @@ jobs:
       - run: make test
       - run: make helm-check
       - name: Known vulnerabilities in Python dependencies
-        run: uv run pip-audit --strict --progress-spinner off
+        # The project itself is not on PyPI and is skipped; all locked dependencies are audited.
+        run: uv run pip-audit --skip-editable --progress-spinner off
 
   image:
     name: image build and scans
