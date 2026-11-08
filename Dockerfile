@@ -18,7 +18,17 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 # No build tools, no uv, no shell scripts in the final image: less attack surface
 # [BSI KONF.10.4]. Fixed numeric UID so Kubernetes can enforce runAsNonRoot [BSI SYS.1.6.A17].
-RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app
+# Security updates of the base image that are newer than the pinned digest (found by Trivy),
+# and no pip at runtime: it is not needed and brings its own vendored, outdated libraries.
+# DL3008: deliberately unpinned, the point is to get the newest security fix; Debian removes
+# superseded versions from its mirrors, so a pin would break the build.
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install --only-upgrade -y --no-install-recommends zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --no-create-home app
 COPY --from=build /opt/venv /opt/venv
 COPY data/titanic.csv /app/data/titanic.csv
 ENV PATH="/opt/venv/bin:$PATH" \

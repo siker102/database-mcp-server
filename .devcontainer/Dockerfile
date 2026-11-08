@@ -13,3 +13,6 @@ RUN curl -fsSLo /tmp/kubeconform.tar.gz \
     && echo "${KUBECONFORM_SHA256}  /tmp/kubeconform.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform \
     && rm /tmp/kubeconform.tar.gz
+
+# Work as the image's non-root user (the dev container default).
+USER vscode
