@@ -1,0 +1,7 @@
+# Store and check out all text files with LF line endings, on every OS.
+# Why: Git for Windows defaults to core.autocrlf=true and would write CRLF into
+# the working copy. The Linux dev container reads that working copy directly,
+# and CRLF breaks bash scripts ("$'\r': command not found") and Makefile recipes.
+# This file overrides the local Git setting for everyone who clones the repo.
+# Binary files are detected automatically by "text=auto" and left untouched.
+* text=auto eol=lf
