@@ -43,6 +43,17 @@ Container nach Windows weitergeleitet.
 
 `make help` listet alle Befehle.
 
+**Falls „Reopen in Container“ unter Windows scheitert** mit
+`accessing specified distro mount service: …/ubuntu.sock: no such file or directory`: VS Code
+bindet standardmäßig den Wayland-Socket der WSL-Distribution ein, und Docker Desktop kann das nur
+mit aktivierter WSL-Integration. Eine der beiden Einstellungen genügt:
+
+- VS Code, Einstellungen (JSON): `"dev.containers.mountWaylandSocket": false`
+- Docker Desktop: Settings → Resources → WSL integration → die Distribution (z. B. Ubuntu) aktivieren
+
+Commits auf dem Windows-Host (außerhalb des Containers) über `uv run git commit`, weil der
+Pre-commit-Hook aus dem Container sonst `pre-commit` nicht findet.
+
 ## Checkliste: Was ein Agent für die Verbindung braucht
 
 Ein Agent kann den Server nutzen, wenn **alle** Punkte erfüllt sind – egal ob der Server lokal, als

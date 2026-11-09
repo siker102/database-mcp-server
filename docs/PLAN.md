@@ -395,11 +395,12 @@ wieder ersetzt werden. Für jeden Punkt steht fest, was zu tun wäre und welche 
 
 ## Abgabe-Checkliste
 
-- [ ] Frischer Clone → Dev Container → `make check` grün
-- [ ] `make up && make smoke` grün, `make down` räumt vollständig auf
-- [ ] CI auf `main` grün (inkl. E2E)
-- [ ] Keine Secrets im Repo (auch nicht in der Git-Historie)
-- [ ] Alle ADRs vorhanden, README-Annahmen aktuell
+- [x] Frischer Clone → Dev Container → `make check` grün (mit der Dev-Containers-CLI von VS Code
+  geprüft; unter Windows ggf. Wayland-Einstellung aus dem README nötig)
+- [x] `make up && make smoke` grün, `make down` räumt vollständig auf
+- [x] CI auf `main` grün (inkl. E2E)
+- [x] Keine Secrets im Repo (auch nicht in der Git-Historie; Historie am 09.11.2026 durchsucht)
+- [x] Alle ADRs vorhanden, README-Annahmen aktuell
 - [ ] `docs/AI_USAGE.md` mit eigener Reflexion ergänzt
 - [ ] Demo einmal komplett durchgespielt
 

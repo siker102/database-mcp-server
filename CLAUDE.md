@@ -407,8 +407,7 @@ Deployment auffällt und nicht erst beim ersten Request.
 │   ├── observability.py       # Logging, Audit, Metriken
 │   ├── tools/
 │   ├── services/              # inkl. sql_guard.py
-│   └── db/                    # Engines, Repository, Seed
-├── migrations/                # Alembic
+│   └── db/                    # Engines, Repository, Seed, migrations/ (Alembic, im Image enthalten)
 ├── scripts/                   # generate_api_key.py, smoke.py
 ├── data/titanic.csv
 ├── tests/{unit,integration,security}/
