@@ -52,6 +52,65 @@ def test_cli_reports_invalid_configuration(monkeypatch: pytest.MonkeyPatch) -> N
     assert main(["db-init"]) == 2
 
 
+def test_cli_serve_stops_on_missing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``serve`` must not start without its secrets [BSI DEV.4.8]."""
+    monkeypatch.delenv("DBMCP_DB_APP_PASSWORD", raising=False)
+    monkeypatch.setenv("DBMCP_DB_SQL_PASSWORD", "y")
+    monkeypatch.setenv("DBMCP_API_KEYS_FILE", "k.json")
+    assert main(["serve"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("DBMCP_PORT", "0"),
+        ("DBMCP_PORT", "70000"),
+        ("DBMCP_LOG_LEVEL", "TRACE"),
+        ("DBMCP_RATE_LIMIT_PER_MINUTE", "0"),
+        ("DBMCP_RATE_LIMIT_BURST", "0"),
+        ("DBMCP_SQL_TIMEOUT_SECONDS", "0"),
+        ("DBMCP_SQL_TIMEOUT_SECONDS", "31"),  # longer than any analysis question needs
+        ("DBMCP_SQL_MAX_CONCURRENCY", "0"),
+        ("DBMCP_SQL_MAX_CONCURRENCY", "33"),
+    ],
+)
+def test_out_of_range_setting_stops_start(
+    monkeypatch: pytest.MonkeyPatch, variable: str, value: str
+) -> None:
+    """Invalid values fail at start-up, not at the first request."""
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv(variable, value)
+    with pytest.raises(ValidationError):
+        ServerSettings()
+
+
+def test_allowed_hosts_must_be_a_json_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic_settings import SettingsError
+
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("DBMCP_ALLOWED_HOSTS", "mcp.example.com")  # forgot the JSON brackets
+    with pytest.raises(SettingsError):
+        ServerSettings()
+
+
+def test_app_does_not_start_with_a_broken_key_file(tmp_path: Path) -> None:
+    """create_app loads the keys first, so a broken key file stops the start [BSI DEV.4.9]."""
+    from database_mcp.app import create_app
+    from database_mcp.auth import KeyConfigError
+
+    keys = tmp_path / "keys.json"
+    keys.write_text("{not json")
+    settings = ServerSettings(
+        db_app_password="x",  # type: ignore[arg-type]
+        db_sql_password="y",  # type: ignore[arg-type]
+        api_keys_file=keys,
+    )
+    with pytest.raises(KeyConfigError):
+        create_app(settings, DatabaseSettings(host="localhost"))
+
+
 def test_csv_has_891_valid_rows() -> None:
     rows = read_rows(DATA_FILE)
     assert len(rows) == 891

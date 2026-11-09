@@ -49,6 +49,7 @@ def _make_keys(path: Path) -> dict[str, str]:
         "pii": {Scope.READ, Scope.PII},
         "sql": {Scope.SQL},
         "all": {Scope.READ, Scope.PII, Scope.SQL},
+        "pii_only": {Scope.PII},  # pii without read must grant nothing
     }
     tokens, entries = {}, []
     for name, scopes in specs.items():
@@ -262,3 +263,265 @@ async def test_metrics_count_calls(server: Server) -> None:
     async with server.client("read") as client:
         await client.call_tool("describe_dataset", {})
     assert value() == before + 1
+
+
+# ---- cross-checks: scopes, PII, input bounds, errors, headers --------------------------------
+
+TOOL_CALLS = {
+    "describe_dataset": {},
+    "search_passengers": {"limit": 1},
+    "get_passenger": {"passenger_id": 1},
+    "get_statistics": {},
+    "run_sql": {"query": "SELECT 1"},
+}
+FIXED_TOOLS = {"describe_dataset", "search_passengers", "get_passenger", "get_statistics"}
+ALLOWED = {
+    "read": FIXED_TOOLS,
+    "pii": FIXED_TOOLS,
+    "sql": {"run_sql"},
+    "all": FIXED_TOOLS | {"run_sql"},
+    "pii_only": set(),
+}
+
+
+@pytest.mark.parametrize("who", list(ALLOWED))
+async def test_scope_matrix_for_every_tool(server: Server, who: str) -> None:
+    """Every tool against every key: allowed exactly where the scope permits [BSI BER.4.1]."""
+    async with server.client(who) as client:
+        listed = _names(await client.list_tools())
+        outcomes = {
+            tool: not (await client.call_tool(tool, args)).is_error
+            for tool, args in TOOL_CALLS.items()
+        }
+    assert listed == ALLOWED[who]
+    assert {tool for tool, ok in outcomes.items() if ok} == ALLOWED[who]
+
+
+PII_FIELDS = {"name", "ticket", "cabin"}
+
+
+def _text(result: Any) -> str:
+    return " ".join(c.text for c in result.content if hasattr(c, "text"))
+
+
+async def test_pii_fields_are_absent_not_just_empty_without_pii(server: Server) -> None:
+    """Without pii the personal fields are not in the answer at all, neither in the structured
+    result nor in the text content the SDK sends alongside [ADR 0005]."""
+    async with server.client("read") as client:
+        search = await client.call_tool("search_passengers", {"limit": 5})
+        single = await client.call_tool("get_passenger", {"passenger_id": 2})
+    for passenger in search.structured_content["passengers"]:
+        assert not PII_FIELDS & passenger.keys()
+    assert not PII_FIELDS & single.structured_content["passenger"].keys()
+    text = _text(search) + _text(single)
+    for value in ["Braund", "A/5 21171", "Cumings", "C85"]:  # name, ticket, cabin of rows 1-2
+        assert value not in text
+
+
+async def test_pii_key_gets_all_personal_fields(server: Server) -> None:
+    async with server.client("pii") as client:
+        single = await client.call_tool("get_passenger", {"passenger_id": 2})
+    passenger = single.structured_content["passenger"]
+    assert passenger.keys() >= PII_FIELDS
+    assert passenger["cabin"] == "C85"
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("search_passengers", {"limit": 0}),
+        ("search_passengers", {"limit": -1}),
+        ("search_passengers", {"limit": 101}),
+        ("search_passengers", {"offset": -1}),
+        ("search_passengers", {"offset": 10_001}),
+        ("search_passengers", {"pclass": 4}),
+        ("search_passengers", {"survived": 2}),
+        ("search_passengers", {"sex": "robot"}),
+        ("search_passengers", {"embarked": "X"}),
+        ("search_passengers", {"min_age": -1}),
+        ("search_passengers", {"max_fare": 1e9}),
+        ("search_passengers", {"limit": "ten"}),
+        ("get_passenger", {"passenger_id": -1}),
+        ("get_passenger", {"passenger_id": 100_001}),
+        ("get_passenger", {}),
+        ("get_statistics", {"group_by": ["pclass", "pclass"]}),
+        ("get_statistics", {"group_by": ["pclass", "sex", "embarked", "survived", "pclass"]}),
+        ("get_statistics", {"group_by": "pclass; DROP TABLE passengers"}),
+        ("run_sql", {"query": ""}),
+        ("run_sql", {"query": "SELECT 1", "limit": 0}),
+        ("run_sql", {"query": "SELECT 1", "limit": 501}),
+        ("run_sql", {"query": "SELECT " + "1" * 5001}),
+    ],
+)
+async def test_out_of_range_input_is_a_tool_error(
+    server: Server, tool: str, args: dict[str, Any]
+) -> None:
+    """Bounds are enforced server-side before any database access [BSI DEV.2.6.1]."""
+    async with server.client("all") as client:
+        result = await client.call_tool(tool, args)
+    assert result.is_error
+
+
+@pytest.mark.parametrize("name_contains", ["a", "x" * 51, "x" * 100_000])
+async def test_name_search_bounds(server: Server, name_contains: str) -> None:
+    async with server.client("pii") as client:
+        result = await client.call_tool("search_passengers", {"name_contains": name_contains})
+    assert result.is_error
+
+
+@pytest.mark.parametrize(
+    ("args", "expected_total"),
+    [
+        ({"limit": 100}, 891),
+        ({"offset": 10_000}, 891),
+        ({"name_contains": "%%"}, 0),  # LIKE wildcards are escaped, not interpreted
+        ({"name_contains": "__"}, 0),
+    ],
+)
+async def test_boundary_values_are_accepted(
+    server: Server, args: dict[str, Any], expected_total: int
+) -> None:
+    async with server.client("pii") as client:
+        result = await client.call_tool("search_passengers", args)
+    assert not result.is_error
+    assert result.structured_content["total"] == expected_total
+
+
+async def test_unexpected_error_reveals_no_internals(
+    database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unexpected exception reaches the agent as a generic error: no message, no stack trace,
+    no paths [BSI DEV.3.2, DEV.3.3]. It is logged on the server instead."""
+    from database_mcp.services.passengers import PassengerService
+
+    async def explode(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("internal detail /srv/secret/path password=hunter2")
+
+    monkeypatch.setattr(PassengerService, "get", explode)
+    tokens = _make_keys(tmp_path / "keys.json")
+    app = create_app(_settings(tmp_path / "keys.json"), database.settings)
+    with structlog.testing.capture_logs() as logs:
+        async with running(app), Server(app, tokens).client("read") as client:
+            result = await client.call_tool("get_passenger", {"passenger_id": 1})
+    text = _text(result)
+    assert result.is_error
+    for leak in ["internal detail", "/srv/secret", "hunter2", "Traceback", "RuntimeError"]:
+        assert leak not in text
+    assert any(e["event"] == "tool_failed" for e in logs)
+
+
+async def test_database_error_message_reveals_no_internals(server: Server) -> None:
+    async with server.client("sql") as client:
+        result = await client.call_tool("run_sql", {"query": "SELECT 1 / 0"})
+    text = _text(result)
+    assert result.is_error
+    for leak in ["Traceback", "asyncpg", "sqlalchemy", "titanic_sql", 'File "']:
+        assert leak not in text
+
+
+async def test_audit_of_run_sql_has_query_but_no_result_and_no_key(server: Server) -> None:
+    with structlog.testing.capture_logs() as logs:
+        async with server.client("sql") as client:
+            result = await client.call_tool(
+                "run_sql", {"query": "SELECT min(sex) AS s FROM passengers_public"}
+            )
+    assert result.structured_content["rows"] == [["female"]]
+    audit = next(e for e in logs if e["event"] == "audit")
+    assert audit["params"]["query"].startswith("SELECT min(sex)")
+    assert audit["rows"] == 1
+    assert "female" not in json.dumps(audit)  # the result value
+    assert server.tokens["sql"] not in json.dumps(logs)
+
+
+async def test_failed_auth_logs_key_id_but_never_the_key(server: Server) -> None:
+    wrong = server.tokens["read"][:-5] + "AAAAA"
+    with structlog.testing.capture_logs() as logs:
+        async with server.http(wrong) as http:
+            response = await http.post("/mcp", json={})
+    assert response.status_code == 401
+    failures = [e for e in logs if e["event"] == "auth_failure"]
+    assert failures and failures[0]["reason"] == "wrong_secret"
+    secret_part = wrong.split("_", 2)[2]
+    assert secret_part not in json.dumps(logs)
+
+
+TOOLS_LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+ACCEPT = "application/json, text/event-stream"
+
+
+@pytest.mark.parametrize(
+    ("template", "authenticated"),
+    [
+        ("Bearer {key}", True),
+        ("bearer {key}", True),  # the scheme is case-insensitive (RFC 6750)
+        ("Bearer  {key}", False),  # two spaces: the token then starts with a space
+        ("Basic {key}", False),
+        ("{key}", False),  # no scheme
+        ("Bearer", False),
+        ("Bearer ", False),
+        ("Bearer {key} extra", False),
+        ("Bearer {key}x", False),
+    ],
+)
+async def test_authorization_header_variants(
+    server: Server, template: str, authenticated: bool
+) -> None:
+    header = template.format(key=server.tokens["read"])
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=server.app), base_url=BASE
+    ) as http:
+        response = await http.post(
+            "/mcp", json=TOOLS_LIST, headers={"authorization": header, "accept": ACCEPT}
+        )
+    assert (response.status_code != 401) is authenticated
+
+
+async def test_foreign_origin_is_rejected(server: Server) -> None:
+    """Browsers send Origin; only configured origins are served (DNS-rebinding protection)."""
+    async with server.http(server.tokens["read"]) as http:
+        response = await http.post(
+            "/mcp", json=TOOLS_LIST, headers={"origin": "http://evil.example", "accept": ACCEPT}
+        )
+    assert response.status_code == 403
+
+
+async def test_missing_host_header_is_rejected(server: Server) -> None:
+    """A request without Host cannot be matched against the allowlist and is refused."""
+    body = json.dumps(TOOLS_LIST).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/mcp",
+        "raw_path": b"/mcp",
+        "query_string": b"",
+        "root_path": "",
+        "client": ("127.0.0.1", 1234),
+        "server": ("127.0.0.1", 8000),
+        "headers": [
+            (b"authorization", f"Bearer {server.tokens['read']}".encode()),
+            (b"content-type", b"application/json"),
+            (b"accept", ACCEPT.encode()),
+            (b"content-length", str(len(body)).encode()),
+        ],
+    }
+    messages = [{"type": "http.request", "body": body, "more_body": False}]
+    sent: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await server.app(scope, receive, send)
+    assert sent[0]["status"] == 421
+
+
+async def test_metrics_are_not_served_on_the_mcp_port(server: Server) -> None:
+    """/metrics lives on its own port (9090); the MCP port must not expose it [BSI KONF.11.7]."""
+    async with server.http(None) as http:
+        response = await http.get("/metrics")
+    assert response.status_code == 404
