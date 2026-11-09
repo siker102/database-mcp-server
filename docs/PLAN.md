@@ -401,7 +401,7 @@ wieder ersetzt werden. Für jeden Punkt steht fest, was zu tun wäre und welche 
 - [x] CI auf `main` grün (inkl. E2E)
 - [x] Keine Secrets im Repo (auch nicht in der Git-Historie; Historie am 09.11.2026 durchsucht)
 - [x] Alle ADRs vorhanden, README-Annahmen aktuell
-- [ ] `docs/AI_USAGE.md` mit eigener Reflexion ergänzt
+- [x] `docs/AI_USAGE.md` mit eigener Reflexion ergänzt
 - [ ] Demo einmal komplett durchgespielt
 
 ## Ausblick (bewusst nicht umgesetzt)

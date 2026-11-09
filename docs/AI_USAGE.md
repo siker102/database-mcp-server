@@ -1,10 +1,12 @@
 # KI-Nutzung
 
-Der Code dieses Projekts wurde mit Claude Code (Modell Claude Opus 5.5) erzeugt. Steuerung über
-`CLAUDE.md` und `docs/PLAN.md`; jede Etappe wird von mir reviewt. Pro Etappe: Ziel, was generiert
-wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
+Der Code dieses Projekts wurde mit Claude Code (Modell Claude Opus 5.5) erzeugt. Anforderungen,
+Annahmen, Regeln und Entscheidungen habe ich vorgegeben (`CLAUDE.md`, `docs/PLAN.md`); die KI hat
+danach in Etappen implementiert. Pro Etappe: Ziel, was generiert wurde, Fehler oder falsche
+Annahmen der KI und deren Korrektur. Meine Rolle, mein Vorgehen beim Review und meine Reflexion
+stehen am Ende.
 
-## Vorbereitung – Plan, Annahmen, BSI-Abgleich
+## Vorbereitung: Plan, Annahmen, BSI-Abgleich
 
 - **Ziel:** Plan und Regeln schärfen, bevor Code entsteht.
 - **Generiert:** Überarbeitung von `CLAUDE.md` und `docs/PLAN.md`: Begründung für jede
@@ -17,9 +19,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   - PLAN.md nannte eine RAM-Einstellung in Docker Desktop, die es mit dem WSL2-Backend nicht gibt.
   - Der ursprüngliche Plan (28–34 h) passte nicht in das Zeitbudget; gekürzt.
 
-### Review und Anpassungen durch mich
-
-## Etappe 1 – Grundgerüst und Datenbank
+## Etappe 1: Grundgerüst und Datenbank
 
 - **Ziel:** Projekt, Dev Container, CI-Gerüst, Datenbank mit Rollen, Rechten und Seed.
 - **Generiert:** `pyproject.toml`/`uv.lock`, `config.py`, `db/` (Engines, Schema, Migration,
@@ -41,16 +41,14 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `db/migrations/versions/0001_passengers.py` → `db/init_db.py` → `db/seed.py` →
   `tests/integration/test_db_init.py`.
 
-### Review und Anpassungen durch mich
-
-## Etappe 2 – MCP-Server, feste Tools, Auth und Observability
+## Etappe 2: MCP-Server, feste Tools, Auth und Observability
 
 - **Ziel:** Server über HTTP mit vier festen Tools, API-Keys, Scopes, Rate Limit, Logs, Audit,
   Metriken.
 - **Generiert:** `app.py`, `auth.py`, `observability.py`, `services/passengers.py`,
   `services/dataset.py`, `db/repository.py`, `tools/`, `scripts/generate_api_key.py`,
   Tests `tests/unit/test_auth.py` und `tests/integration/test_mcp_http.py`, ADR 0001, 0003, 0005.
-- **SDK geprüft statt angenommen:** `mcp` 2.3.0 – `FastMCP` heißt jetzt `MCPServer`; das SDK
+- **SDK geprüft statt angenommen:** `mcp` 2.3.0: `FastMCP` heißt jetzt `MCPServer`; das SDK
   bietet `TokenVerifier`, `BearerAuthBackend`, `RequireAuthMiddleware`,
   `TransportSecuritySettings` und `ServerMiddleware`; akzeptierte Protokollversionen stehen in
   `mcp.types.version`.
@@ -65,9 +63,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `services/passengers.py` → `db/repository.py` → `observability.py` →
   `tests/integration/test_mcp_http.py`.
 
-### Review und Anpassungen durch mich
-
-## Etappe 3 – SQL-Tool und Härtung
+## Etappe 3: SQL-Tool und Härtung
 
 - **Ziel:** `run_sql` mit Defense in Depth und Angriffs-Tests pro Schicht.
 - **Generiert:** `services/sql_guard.py`, `services/sql_runner.py`, Tool `run_sql`,
@@ -82,9 +78,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
 - **Lesereihenfolge:** `services/sql_guard.py` → `services/sql_runner.py` →
   `tests/security/test_sql_attacks.py` → `docs/adr/0004-...` → `docs/SECURITY.md`.
 
-### Review und Anpassungen durch mich
-
-## Etappe 4 – Container, Helm-Chart, Ende-zu-Ende-Test und Abschluss
+## Etappe 4: Container, Helm-Chart, Ende-zu-Ende-Test und Abschluss
 
 - **Ziel:** Image, Compose-Stack mit Smoke-Test, Helm-Chart, CI-Prüfungen, Abschluss der Doku.
 - **Generiert:** `scripts/smoke.py`, `deploy/helm/database-mcp/` (Deployment, Service,
@@ -98,6 +92,9 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
 - **Nicht verifiziert:** CI-Lauf auf GitHub (kein Push), Start des Dev Containers, Installation in
   einem echten Cluster, die Client-Befehle für MCP Inspector und Claude Code (aus der jeweiligen
   Doku übernommen, nicht ausgeführt).
+  *Nachtrag:* Inzwischen sind alle CI-Läufe auf GitHub grün, und `make check` läuft im Dev
+  Container auf meinem Windows-PC grün durch (286 Tests). Offen bleiben die Installation in einem
+  echten Cluster (O4) und die Client-Befehle.
 - **Fehler / falsche Annahmen der KI:**
   - Trivy fand im Basis-Image HIGH-Schwachstellen in `zlib1g` (Debian-Fix neuer als der gepinnte
     Digest) und in den von pip mitgebrachten Bibliotheken. Behoben: gezieltes Sicherheitsupdate von
@@ -114,9 +111,7 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `templates/networkpolicy.yaml` → `templates/job-db-init.yaml` → `README.md` (Kubernetes) →
   `docs/RUNBOOK.md`.
 
-### Review und Anpassungen durch mich
-
-## Nachtrag – Kreuzprüfung der Tests
+## Nachtrag: Kreuzprüfung der Tests
 
 - **Ziel:** Die vorhandenen Tests gegen den Code gegenprüfen, kritische fehlende Randfälle ergänzen
   und dabei gefundene Fehler beheben (Sicherheit und Korrektheit vor Coverage).
@@ -145,4 +140,38 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `tests/security/test_sql_attacks.py` (`CTE_SCOPE_BYPASSES`, `TYPE_ATTACKS`) →
   `tests/integration/test_mcp_http.py` (Abschnitt „cross-checks“) → `tests/unit/test_auth.py`.
 
-### Review und Anpassungen durch mich
+## Meine Rolle, Review und Reflexion
+
+**Meine Rolle.** Ich habe das Projekt geplant und gesteuert, den Code hat die KI geschrieben:
+
+- Anforderungen, Annahmen und Regeln formuliert (`CLAUDE.md`, `docs/PLAN.md`), u. a. „jede
+  Entscheidung braucht eine konkrete Begründung“ und „keine APIs erfinden, sondern den Quellcode des
+  SDK lesen“.
+- Die Entscheidungen getroffen: BSI-Grundschutz als Sicherheitsmaßstab; Python 3.14 statt 3.12;
+  ein API-Key pro Agent statt pro Team; TLS zur Datenbank als Default; Salt im Key-Hash; die
+  Abweichungen A1–A3 und die offenen Punkte O1–O4 mit Begründung; Kürzung auf vier Etappen für den
+  Zeitrahmen von 8 Stunden; Umbenennung in `database-mcp`, weil Titanic nur der Demo-Datensatz ist.
+- Lücken eingefordert, die mir beim Prüfen aufgefallen sind, z. B. vollständige Anleitung für den
+  Produktivbetrieb mit Ports und Firewall-Regeln, Checkliste für die Anbindung von Agents,
+  Ablaufdiagramm für feste Tools und freies SQL.
+
+**Wie ich reviewt habe.** Im Zeitrahmen von 8 Stunden habe ich nicht jede Codezeile gelesen, sondern
+geprüft, ob ich jede **Entscheidung** und jeden **Test** verstehe und vertreten kann:
+
+- Architektur, ADRs, `docs/SECURITY.md` und den Ablauf einer Abfrage durchgearbeitet und
+  hinterfragt (z. B. warum die Datenbankrechte und nicht der Validator die harte Grenze sind).
+- Die Testübersicht geprüft: Jeder Schritt des Ablaufs ist durch eigene Tests abgedeckt.
+- Selbst ausgeführt: `make check` im Dev Container, Compose-Stack mit Smoke-Test, CI-Läufe auf
+  GitHub.
+- Eine zusätzliche, unabhängige Kreuzprüfung der Tests durch einen zweiten KI-Agenten beauftragt.
+  Sie hat vier echte Fehler gefunden, darunter eine Umgehung des SQL-Validators; alle sind mit
+  Regressionstests behoben.
+
+**Reflexion.**
+
+- *Was gut funktioniert hat:* Viel Zeit in Plan und Regeln vor dem ersten Code. Die KI hat dadurch
+  ohne Rückfragen in die richtige Richtung gearbeitet, und Fehlannahmen (z. B. zu den Rollen-Defaults
+  in PostgreSQL oder zur Auth-API des SDK) wurden früh sichtbar und dokumentiert.
+- *Was ich gelernt habe:* Einer einzelnen Prüfschicht nicht blind zu vertrauen. Die Lücken der
+  Kreuzprüfung lagen genau dort, wo nur der Validator schützt. Das bestätigt die Entscheidung, die
+  Datenbankrechte zur harten Grenze zu machen.

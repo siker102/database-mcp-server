@@ -461,5 +461,6 @@ auf Deutsch.
 ## `docs/AI_USAGE.md`
 
 Pro Etappe ein Eintrag mit: Ziel der Etappe, was generiert wurde, aufgetretene Fehler oder falsche
-Annahmen der KI und deren Korrektur. Den Abschnitt „Review und Anpassungen durch mich" leer lassen –
-den fülle ich selbst.
+Annahmen der KI und deren Korrektur. Am Ende ein Abschnitt „Meine Rolle, Review und Reflexion“:
+meine Entscheidungen, wie ich reviewt habe (Entscheidungen und Tests verstehen, nicht jede Zeile
+lesen) und meine Reflexion. Diesen Abschnitt nur nach meinen Vorgaben ändern.
