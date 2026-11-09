@@ -20,7 +20,10 @@
     "UV_LINK_MODE": "copy"
   },
   "forwardPorts": [8000],
-  "postCreateCommand": "make install && uv run pre-commit install",
+  // A folder bind-mounted from Windows appears with a foreign owner, so git refuses it ("dubious
+  // ownership") and pre-commit cannot install its hook. Trust exactly this workspace folder,
+  // nothing else: it is the developer's own checkout.
+  "postCreateCommand": "git config --global --add safe.directory \"${containerWorkspaceFolder}\" && make install && uv run pre-commit install",
   "customizations": {
     "vscode": {
       "extensions": [
