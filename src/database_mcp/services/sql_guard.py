@@ -32,6 +32,15 @@ ALLOWED_FUNCTIONS = frozenset(
     }
 )  # fmt: skip
 
+# Data types allowed in casts and typed literals. Object identifier types such as regclass,
+# regrole or oid would let a query probe the catalog ("does role X exist?"), so they are out.
+ALLOWED_TYPES = frozenset(
+    {
+        "SMALLINT", "INT", "BIGINT", "DECIMAL", "FLOAT", "DOUBLE", "BOOLEAN",
+        "TEXT", "VARCHAR", "CHAR", "DATE", "TIME", "TIMESTAMP", "TIMESTAMPTZ", "INTERVAL",
+    }
+)  # fmt: skip
+
 # Node types that change data, schema, rights or session state. Rejected anywhere in the tree,
 # which also catches data-modifying CTEs (WITH x AS (DELETE ...)).
 FORBIDDEN_NODES: tuple[type[exp.Expression], ...] = (
@@ -65,6 +74,41 @@ def _function_name(node: exp.Func) -> str:
     return node.name.lower() if isinstance(node, exp.Anonymous) else type(node).__name__
 
 
+def _identifier(node: exp.Identifier) -> str:
+    """Name as PostgreSQL resolves it: unquoted names fold to lower case, quoted ones are exact."""
+    return str(node.this) if node.quoted else str(node.this).lower()
+
+
+def _cte_name(cte: exp.CTE) -> str:
+    return _identifier(cte.args["alias"].this)
+
+
+def _visible_cte_names(table: exp.Table) -> set[str]:
+    """Names of the CTEs that ``table`` can refer to, following PostgreSQL's scoping rules.
+
+    A CTE is visible in the query that defines it and in that query's subqueries, never outside.
+    Inside a WITH list a CTE only sees the CTEs before it (with RECURSIVE: all of them). Without
+    these rules a CTE named like a catalog view in one scope would whitelist the real catalog
+    view in another scope, e.g. ``SELECT * FROM (WITH pg_roles AS (SELECT 1) SELECT 1) x,
+    pg_roles`` (regression test in tests/security).
+    """
+    names: set[str] = set()
+    node: exp.Expr = table
+    while node.parent is not None:
+        parent = node.parent
+        if isinstance(parent, exp.With) and isinstance(node, exp.CTE):
+            ctes = parent.expressions
+            position = next(i for i, cte in enumerate(ctes) if cte is node)
+            visible = ctes if parent.args.get("recursive") else ctes[:position]
+            names.update(_cte_name(cte) for cte in visible)
+        else:
+            with_clause = parent.args.get("with_")
+            if isinstance(with_clause, exp.With) and node is not with_clause:
+                names.update(_cte_name(cte) for cte in with_clause.expressions)
+        node = parent
+    return names
+
+
 def validate(query: str) -> str:
     """Validate ``query`` and return it normalised (single statement, no comments).
 
@@ -91,16 +135,15 @@ def validate(query: str) -> str:
                 f"{type(node).__name__.upper()} is not allowed; only read-only SELECT queries."
             )
 
-    cte_names = {cte.alias_or_name.lower() for cte in tree.find_all(exp.CTE)}
     for table in tree.find_all(exp.Table):
         if not isinstance(table.this, exp.Identifier):
             raise SqlRejectedError("Table functions are not allowed.")
-        name = table.name.lower()
+        name = _identifier(table.this)
         if table.db or table.catalog:
             raise SqlRejectedError(
                 "Schema-qualified tables are not allowed; use passengers_public."
             )
-        if name not in ALLOWED_TABLES and name not in cte_names:
+        if name not in ALLOWED_TABLES and name not in _visible_cte_names(table):
             raise SqlRejectedError(f"Table '{name}' is not allowed; only passengers_public.")
 
     for func in tree.find_all(exp.Func):
@@ -108,4 +151,11 @@ def validate(query: str) -> str:
         if name not in ALLOWED_FUNCTIONS:
             raise SqlRejectedError(f"Function '{name}' is not allowed.")
 
-    return tree.sql(dialect="postgres")
+    for data_type in tree.find_all(exp.DataType):
+        kind = data_type.this
+        if not isinstance(kind, exp.DataType.Type) or kind.name not in ALLOWED_TYPES:
+            raise SqlRejectedError(f"Type '{data_type.sql(dialect='postgres')}' is not allowed.")
+
+    # Without comments: sqlglot would otherwise re-emit them as /* ... */, and PostgreSQL nests
+    # block comments, so the executed text could differ from what was validated.
+    return tree.sql(dialect="postgres", comments=False)
