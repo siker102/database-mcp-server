@@ -8,7 +8,7 @@ COMPOSE ?= docker compose
 CHART := deploy/helm/database-mcp
 KUBE_VERSION ?= 1.33.0
 
-.PHONY: help install fmt lint typecheck test check helm-check up down smoke db-init run docker-build
+.PHONY: help install fmt lint typecheck test check helm-check up down smoke demo db-init run docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -45,6 +45,9 @@ down: ## Stop the Compose stack and delete its volumes
 
 smoke: ## End-to-end test against the running Compose stack
 	$(UV) run python scripts/smoke.py --url http://localhost:8000/mcp
+
+demo: ## Guided live demo against the running Compose stack
+	$(UV) run python scripts/demo.py --url http://localhost:8000/mcp
 
 db-init: ## Run db-init once more against the Compose database
 	$(COMPOSE) run --rm db-init

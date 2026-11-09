@@ -136,6 +136,17 @@ uv run python scripts/smoke.py --url http://localhost:8000/mcp
 Prüft `tools/list`, `describe_dataset`, `get_statistics`, `run_sql`, einen Aufruf ohne Key (401) und
 ein verbotenes `DELETE`. Ausgabe je Prüfung `OK`/`FAIL`, Exit-Code 0 nur bei Erfolg.
 
+### Mit dem Demo-Skript
+
+```bash
+make demo
+```
+
+Führt Schritt für Schritt vor: Aufruf ohne Key (401), sichtbare Tools, eine echte Frage per
+`get_statistics`, eine freie SQL-Abfrage auf der View und fünf Angriffe auf freies SQL, die mit
+Begründung abgelehnt werden (u. a. die im Test-Review gefundene CTE-Umgehung). Danach zeigt
+`docker compose logs server | grep '"event": "audit"'` die Audit-Events dieser Aufrufe.
+
 ### Mit MCP Inspector (CLI)
 
 Laut [Inspector-README](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md)
