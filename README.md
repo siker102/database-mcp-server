@@ -500,6 +500,61 @@ Agent ─HTTPS─▶ Ingress (TLS) ─▶ Auth (API-Key → Agent, Team, Scopes)
 Querschnitt: JSON-Logs · Audit-Events · Prometheus-Metriken · /healthz · /readyz
 ```
 
+### Ablauf einer Abfrage: feste Tools und freies SQL
+
+Die festen Tools fragen die Datenbank mit der Rolle `titanic_app` ab, das freie SQL (`run_sql`)
+ausschließlich mit der Rolle `titanic_sql`. Der Unterschied: Bei den festen Tools schreibt der
+Server die SQL selbst (nur gebundene Parameter), bei `run_sql` kommt die SQL vom Agent und ist
+damit nicht vertrauenswürdig – deshalb durchläuft sie vier Schichten, und die Rechte der Rolle
+`titanic_sql` sind die harte Grenze.
+
+```mermaid
+flowchart TD
+    A["Agent ruft ein Tool auf<br/>(Authorization: Bearer dbmcp_…)"] --> K{"API-Key gültig<br/>und nicht abgelaufen?"}
+    K -- nein --> E401["HTTP 401"]
+    K -- ja --> RL{"Rate Limit<br/>eingehalten?"}
+    RL -- nein --> E429["HTTP 429"]
+    RL -- ja --> T{"Welches Tool?"}
+
+    T -- "feste Tools:<br/>search_passengers, get_passenger,<br/>get_statistics, describe_dataset" --> SR{"Scope read?"}
+    SR -- nein --> DEN["Tool-Fehler:<br/>Zugriff verweigert"]
+    SR -- ja --> P{"Scope pii?<br/>(nicht bei get_statistics)"}
+    P -- ja --> APPF[("Rolle titanic_app<br/>liest Tabelle passengers<br/>inkl. name, ticket, cabin")]
+    P -- nein --> APPV[("Rolle titanic_app<br/>liest View passengers_public<br/>ohne PII-Spalten")]
+    APPF --> RES["Ergebnis an den Agent"]
+    APPV --> RES
+
+    T -- "run_sql<br/>(freies SQL)" --> SS{"Scope sql?"}
+    SS -- nein --> DEN
+    SS -- ja --> V{"Schicht 1 – Validator (sqlglot):<br/>genau ein SELECT, nur passengers_public,<br/>Funktions- und Typ-Allowlist"}
+    V -- abgelehnt --> REJ["Tool-Fehler mit Begründung,<br/>damit der Agent korrigieren kann"]
+    V -- ok --> X["Schicht 2 – Ausführung als Rolle titanic_sql:<br/>neue Verbindung pro Query (NullPool),<br/>read-only Transaktion, Timeout 5 s,<br/>max. 4 parallel, max. 500 Zeilen"]
+    X --> G{"Schicht 3 – Datenbankrechte:<br/>titanic_sql darf nur SELECT<br/>auf passengers_public"}
+    G -- "Zugriff auf passengers,<br/>Schreiben, Timeout" --> DBE["Tool-Fehler,<br/>ohne interne Details"]
+    G -- erlaubt --> SQLR["Zeilen + truncated an den Agent"]
+
+    DEN --> AU["Schicht 4 – Audit-Event + Metriken<br/>bei jedem Aufruf, auch bei Fehlern;<br/>nie Ergebnisdaten"]
+    REJ --> AU
+    DBE --> AU
+    RES --> AU
+    SQLR --> AU
+```
+
+**Warum eine eigene Rolle für freies SQL?** Würde `run_sql` mit `titanic_app` laufen, hinge der
+Schutz der PII-Spalten allein am Validator: Ein einziger Fehler darin (eine Umgehung über einen
+gleichnamigen CTE wurde im Test-Review tatsächlich gefunden und behoben) gäbe Namen, Tickets und
+Kabinen frei. Mit `titanic_sql` prüft PostgreSQL selbst bei jeder Abfrage, dass nur die View gelesen
+wird – unabhängig davon, was der Validator durchlässt.
+
+| | Rolle `titanic_app` (feste Tools) | Rolle `titanic_sql` (`run_sql`) |
+|---|---|---|
+| Woher kommt die SQL? | vom Server, nur gebundene Parameter | vom Agent – nicht vertrauenswürdig |
+| Lesen | `passengers` und `passengers_public` | **nur** `passengers_public` |
+| Schreiben, Schema ändern | nein | nein |
+| PII | nur mit Scope `pii`, sonst liest das Repository die View | nie |
+| Verbindungen | Pool | `NullPool` (frische Verbindung pro Query) |
+| Zusätzliche Bremsen | – | read-only Transaktion, `statement_timeout`, `temp_file_limit`, Semaphore, Zeilenlimit |
+
 Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Entscheidungen mit Alternativen:
 [`docs/adr/`](docs/adr/) (0001 SDK/Protokoll, 0002 Datenbank, 0003 API-Keys, 0004 freies SQL,
 0005 PII, 0006 Deployment, 0007 Dev Container). Regeln und Begründungen: [`CLAUDE.md`](CLAUDE.md),
