@@ -77,7 +77,11 @@ Staging-Cluster) hängen von der Plattform des Auftraggebers ab.
 - **Audit über stdout ist nicht revisionssicher.** Revisionssicherheit entsteht erst in der
   Log-Plattform (eigener Index, eingeschränkte Rechte) [BSI DET.3.5].
 - **Systemkataloge** sind in PostgreSQL für jede Rolle lesbar; nur der Validator blockt sie. Sie
-  enthalten keine Passagierdaten.
+  enthalten keine Passagierdaten, aber Metadaten (Rollennamen, Sitzungen). Der Test-Review hat hier
+  zwei Umgehungen gefunden und behoben (scope-genaue CTE-Auflösung, Typ-Allowlist für Casts; siehe
+  Nachtrag in ADR 0004). Weitere Härtung wäre auf Datenbankseite möglich (Leserechte auf einzelne
+  Katalog-Views für `PUBLIC` entziehen), betrifft aber alle Clients der Datenbank und ist Sache des
+  DB-Teams.
 - **Rate Limit pro Pod**: bei zwei Replicas effektiv doppelt so hoch.
 - **Lokale Umgebung**: Compose-Postgres ohne TLS, `titanic_owner` ist dort Superuser, der
   Demo-Key liegt im Klartext in `secrets/demo_api_key` (gitignored). Nur für Entwicklung.

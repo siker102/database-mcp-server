@@ -16,10 +16,14 @@ harte Grenze**, der Validator lehnt früh und verständlich ab.
 1. **Validator** (`services/sql_guard.py`, sqlglot, Dialekt `postgres`): genau ein Statement, nur
    `SELECT`/Set-Operationen; kein DML/DDL/`COPY`/`SET`/`GRANT`/Transaktionsbefehl irgendwo im
    Baum (auch nicht in CTEs); kein `SELECT INTO`, kein `FOR UPDATE/SHARE`; Tabellen nur
-   `passengers_public` (und CTE-Namen), keine Schema-Qualifizierung, keine Tabellenfunktionen;
-   Funktionen nur aus einer Allowlist; höchstens 5000 Zeichen. **Ausgeführt wird der vom Parser
-   neu erzeugte SQL-Text**, nicht der Originaltext: Was geprüft wurde, ist genau das, was läuft
-   (kein Unterschied zwischen Parser und Datenbank, z. B. bei Kommentaren).
+   `passengers_public` oder ein CTE-Name, **der an genau dieser Stelle sichtbar ist** (so wie
+   PostgreSQL CTEs auflöst: umgebende `WITH`-Klauseln, frühere Geschwister-CTEs, `RECURSIVE`,
+   Groß-/Kleinschreibung bei Anführungszeichen); keine Schema-Qualifizierung, keine
+   Tabellenfunktionen; Funktionen nur aus einer Allowlist; **Casts nur auf normale Datentypen**
+   (Zahlen, Text, Datum/Zeit, Boolean) – Objekt-Typen wie `regclass`, `regrole`, `regproc` oder `oid`
+   würden einen Text in eine Katalog-Abfrage verwandeln; höchstens 5000 Zeichen. **Ausgeführt wird
+   der vom Parser neu erzeugte SQL-Text ohne Kommentare**, nicht der Originaltext: Was geprüft
+   wurde, ist genau das, was läuft.
 2. **Ausführung** (`services/sql_runner.py`): Rolle `titanic_sql`, eigene Engine mit `NullPool`,
    Read-only-Transaktion, `SET LOCAL statement_timeout`, App-Timeout als Rückfallebene,
    Semaphore für parallele Abfragen, `fetchmany(limit + 1)` auf einem serverseitigen Cursor →
@@ -52,3 +56,19 @@ harte Grenze**, der Validator lehnt früh und verständlich ab.
   blockt ihn nur der Validator. Die Kataloge enthalten keine Passagierdaten (bekannte Grenze in
   `docs/SECURITY.md`).
 - Neue erlaubte Funktionen müssen bewusst in die Allowlist aufgenommen werden.
+
+## Nachtrag 2026-11-09: Befunde aus dem Test-Review
+
+Ein gezielter Review der Tests (Angriffs-Queries gegen den Validator) hat zwei Lücken gefunden, die
+behoben und mit Regressionstests abgesichert sind (`tests/security/test_sql_attacks.py`):
+
+- **CTE-Namen galten in der ganzen Query.** Ein CTE in einer Unterabfrage gab denselben Namen auch
+  außerhalb frei, z. B. `SELECT * FROM (WITH pg_roles AS (SELECT 1) SELECT 1) x, pg_roles`. Für
+  `passengers` hätte das `GRANT` von `titanic_sql` gegriffen; Systemkataloge wie `pg_roles` darf
+  in PostgreSQL aber jede Rolle lesen, dort war der Validator die einzige Grenze. Jetzt wird jeder
+  Tabellenname gegen die an dieser Stelle sichtbaren CTEs geprüft.
+- **Casts auf Objekt-Typen** (`'x'::regclass`, `::regrole`, `::oid`) erlaubten herauszufinden, ob
+  Rollen oder Tabellen existieren. Casts sind jetzt auf eine Typ-Allowlist beschränkt.
+
+Die Befunde bestätigen die Gewichtung dieser Entscheidung: Wo die Datenbankrechte greifen, war
+nichts gefährdet; die Lücken lagen genau dort, wo nur der Validator schützt.
