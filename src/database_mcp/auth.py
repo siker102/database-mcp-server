@@ -156,7 +156,8 @@ class ApiKeyVerifier:
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Return an access token for a valid key, otherwise ``None``."""
-        match = _KEY_PATTERN.match(token)
+        # fullmatch, not match: "$" would also match before a trailing newline.
+        match = _KEY_PATTERN.fullmatch(token)
         key_id = match.group(1) if match else None
         entry = self._keys.get(key_id) if key_id else None
         if match is None or entry is None:
