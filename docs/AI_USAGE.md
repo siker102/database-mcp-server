@@ -115,3 +115,34 @@ wurde, Fehler oder falsche Annahmen der KI und deren Korrektur.
   `docs/RUNBOOK.md`.
 
 ### Review und Anpassungen durch mich
+
+## Nachtrag – Kreuzprüfung der Tests
+
+- **Ziel:** Die vorhandenen Tests gegen den Code gegenprüfen, kritische fehlende Randfälle ergänzen
+  und dabei gefundene Fehler beheben (Sicherheit und Korrektheit vor Coverage).
+- **Generiert:** neue Testfälle in `tests/security/test_sql_attacks.py`, `tests/unit/test_auth.py`,
+  `tests/unit/test_config_and_seed.py`, `tests/integration/test_mcp_http.py` (von 127 auf
+  286 Tests); zwei kleine Korrekturen im Code, Testübersicht im README aktualisiert.
+- **Gefundene Fehler (jeweils mit Regressionstest behoben):**
+  - **SQL-Validator, CTE-Namen nicht pro Gültigkeitsbereich geprüft** (`services/sql_guard.py`):
+    Eine CTE in einer Unterabfrage gab einen gleichnamigen echten Tabellennamen im äußeren Teil
+    frei, z. B. `SELECT * FROM (WITH pg_roles AS (SELECT 1) SELECT 1) x, pg_roles`. Katalog-Views
+    wie `pg_roles`, `pg_user` und `pg_stat_activity` darf in PostgreSQL jede Rolle lesen, die
+    Datenbankrechte hätten das also nicht verhindert. Jetzt gelten CTE-Namen nur dort, wo
+    PostgreSQL sie sichtbar macht (umschließende WITH-Klauseln, nur frühere Geschwister ohne
+    RECURSIVE, Groß-/Kleinschreibung bei Anführungszeichen).
+  - **Casts auf Objekt-ID-Typen** (`regclass`, `regrole`, `regproc`, `oid`) erlaubten, den Katalog
+    abzufragen („gibt es Rolle X?“). Jetzt Allowlist gewöhnlicher Typen.
+  - **Kommentare im ausgeführten SQL:** sqlglot gibt Kommentare als `/* … */` wieder aus, PostgreSQL
+    verschachtelt Blockkommentare; ausgeführter und geprüfter Text hätten sich unterscheiden können.
+    Jetzt ohne Kommentare.
+  - **API-Key mit Zeilenumbruch am Ende akzeptiert** (`auth.py`): `re.match` mit `$` passt auch vor
+    einem abschließenden Zeilenumbruch. Jetzt `fullmatch`.
+- **Bewusst nicht ergänzt:** Last- und Fuzzing-Tests (Zeitrahmen, Sicherheitsniveau „erhöht“);
+  `serve` mit kaputter Key-Datei bricht zwar sofort ab, aber mit Stacktrace statt Exit-Code 2
+  (kein Sicherheitsproblem, nur unschöne Meldung).
+- **Lesereihenfolge:** `services/sql_guard.py` (`_visible_cte_names`, Typ-Allowlist) →
+  `tests/security/test_sql_attacks.py` (`CTE_SCOPE_BYPASSES`, `TYPE_ATTACKS`) →
+  `tests/integration/test_mcp_http.py` (Abschnitt „cross-checks“) → `tests/unit/test_auth.py`.
+
+### Review und Anpassungen durch mich
