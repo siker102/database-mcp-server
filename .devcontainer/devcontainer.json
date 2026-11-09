@@ -19,6 +19,9 @@
     "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv",
     "UV_LINK_MODE": "copy"
   },
+  // VS Code may pass the Windows VIRTUAL_ENV into container terminals; point it at the container
+  // venv so uv does not warn on every command.
+  "remoteEnv": { "VIRTUAL_ENV": "/home/vscode/.venv" },
   "forwardPorts": [8000],
   // A folder bind-mounted from Windows appears with a foreign owner, so git refuses it ("dubious
   // ownership") and pre-commit cannot install its hook. Trust exactly this workspace folder,
