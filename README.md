@@ -24,7 +24,7 @@ sich* daran, es ist kein Konformitätsnachweis.
 [Konfiguration](#konfiguration) · [Architektur im Detail](#architektur-im-detail) ·
 [Annahmen](#annahmen) ·
 [Grenzen und offene Punkte](#bekannte-grenzen-offene-punkte-und-ausblick) ·
-[Datensatz](#datensatz-quelle-und-lizenz) · [KI-Nutzung](#ki-nutzung)
+[Datensatz](#datensatz-quelle-und-lizenz) · [KI-Nutzung](#ki-nutzung) · [Lizenz](#lizenz)
 
 ## Welches Problem löst es?
 
@@ -716,3 +716,13 @@ produktiven Einsatz wäre die Lizenz zu klären.
 
 Der Code wurde mit Claude Code erzeugt; Steuerung über `CLAUDE.md` und `docs/PLAN.md`, Review durch
 mich. Ablauf, Fehler und Korrekturen pro Etappe: [`docs/AI_USAGE.md`](docs/AI_USAGE.md).
+
+## Lizenz
+
+Code, Konfiguration und Dokumentation stehen unter der [MIT-Lizenz](LICENSE). Grund: kurz,
+verbreitet und ohne Auflagen außer dem Lizenzhinweis – wer Teile übernehmen will, etwa den
+SQL-Guard oder das Helm-Chart, kann das ohne Rückfrage tun.
+
+Ausgenommen ist `data/titanic.csv`: Für den Datensatz gilt die oben unter
+[Datensatz: Quelle und Lizenz](#datensatz-quelle-und-lizenz) beschriebene Lage; die MIT-Lizenz
+erstreckt sich nicht darauf.
