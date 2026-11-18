@@ -336,6 +336,28 @@ auf `main` laufen immer zu Ende, damit jeder Commit dort ein vollständiges Erge
 
 Stand: 286 Tests, Coverage ca. 93 %.
 
+**Warum 93 % und nicht 100 %?** Coverage misst, welche Zeilen ein Test ausgeführt hat, nicht ob
+der Test etwas Sinnvolles prüft. 100 % als Ziel verleitet zu Tests, die nur Zeilen abhaken.
+Entscheidend ist, dass die sicherheitskritischen Pfade lückenlos geprüft sind, und das sind sie:
+`config.py` 100 %, `auth.py` 99 %, `sql_guard.py` 98 %, dazu die Angriffs-Queries und die Tests
+jeder SQL-Schicht einzeln. Die CI verlangt mindestens 85 % als Untergrenze, damit neue, ungetestete
+Pfade auffallen [BSI TEST.3.2]. Die restlichen Zeilen fallen in drei Gruppen:
+
+- **Prozessstart und Verdrahtung** (`__main__.py`, `cli.py` `serve`/`db-init`, `app.serve`,
+  Logging-Setup in `observability.py`): Diese Zeilen laufen nur in einem echten Prozess. Geprüft
+  werden sie durch den Ende-zu-Ende-Test gegen den Compose-Stack (`make smoke`, in der CI als
+  E2E-Job), der nicht in die Coverage-Messung eingeht. Ein Unit-Test mit gemocktem `uvicorn.run`
+  würde nur den Mock prüfen.
+- **Defensive Rückfallebenen**, die über den normalen Weg nicht erreichbar sind: z. B. „kein
+  Aufrufer“ in `tools/common.py` (die Auth-Schicht lehnt vorher mit 401 ab), der App-Timeout in
+  `sql_runner.py` (der Datenbank-Timeout greift zuerst) oder seltene Datenbank-Fehlercodes wie
+  „Platte voll“. Sie zu testen hieße, Zustände künstlich herzustellen; ihr Wert liegt darin, dass
+  sie im Fehlerfall sicher ablehnen.
+- **Einfache Zweige mit geringem Risiko**, etwa einzelne Filtergrenzen (`min_fare`, `max_age`), die
+  TLS-Modi `require`/`verify-ca` (getestet sind `verify-full` und `disable`) oder die Umwandlung
+  seltener Datentypen. Diese ließen sich mit wenig Aufwand abdecken und sind Kandidaten für die
+  nächste Runde.
+
 | Datei | Was wird geprüft | Belegt |
 |---|---|---|
 | `tests/unit/test_config_and_seed.py` | Pflicht-Secrets ohne Default, Secrets nicht in `repr`, `verify-full` als Default, `prefer` abgelehnt, CLI bricht bei ungültiger Konfiguration ab (auch `serve` ohne Secret, Werte außerhalb der Grenzen, Host-Allowlist ohne JSON-Liste, kaputte Key-Datei); CSV: 891 Zeilen, falscher Header, ungültige Zeile mit Zeilennummer | Sichere Defaults [BSI DEV.4.8, DEV.4.9], Eingabevalidierung [DEV.2.6.1] |
