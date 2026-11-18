@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+secrets
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+docs
+tests
+deploy
+.devcontainer
+.github

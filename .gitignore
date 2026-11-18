@@ -1,0 +1,23 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+
+# Local secrets: never commit [BSI DEV.2.5]
+.env
+secrets/
+*.keys.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

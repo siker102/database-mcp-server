@@ -1,0 +1,178 @@
+# KI-Nutzung
+
+Der Code dieses Projekts wurde mit Claude Code (Modell Claude Opus 5.5) erzeugt. Anforderungen,
+Annahmen, Regeln und Entscheidungen habe ich vorgegeben (`CLAUDE.md`, `docs/PLAN.md`); die KI hat
+danach in Etappen implementiert. Pro Etappe: Ziel, was generiert wurde, Fehler oder falsche
+Annahmen der KI und deren Korrektur. Meine Rolle, mein Vorgehen beim Review und meine Reflexion
+stehen am Ende.
+
+## Vorbereitung: Plan, Annahmen, BSI-Abgleich
+
+- **Ziel:** Plan und Regeln schärfen, bevor Code entsteht.
+- **Generiert:** Überarbeitung von `CLAUDE.md` und `docs/PLAN.md`: Begründung für jede
+  Entscheidung, BSI-Bezüge (Grundschutz++-Katalog aus der offiziellen BSI-Bibliothek ausgewertet),
+  Abweichungen A1–A3, offene Punkte O1–O4, Kürzung auf vier Etappen.
+- **Fehler / falsche Annahmen der KI:**
+  - Der erste Plan nahm an, dass Rollen-Defaults (`default_transaction_read_only`,
+    `statement_timeout`) eine Schutzschicht sind; sie lassen sich per `set_config` überschreiben.
+    Korrigiert: Die Rechte sind die harte Grenze, zusätzlich `NullPool` und Funktions-Allowlist.
+  - PLAN.md nannte eine RAM-Einstellung in Docker Desktop, die es mit dem WSL2-Backend nicht gibt.
+  - Der ursprüngliche Plan mit neun Phasen war zu breit angelegt; auf vier Etappen mit je einem
+    Review-Stopp gestrafft.
+
+## Etappe 1: Grundgerüst und Datenbank
+
+- **Ziel:** Projekt, Dev Container, CI-Gerüst, Datenbank mit Rollen, Rechten und Seed.
+- **Generiert:** `pyproject.toml`/`uv.lock`, `config.py`, `db/` (Engines, Schema, Migration,
+  Seed, `db-init`), `cli.py`, `.devcontainer/`, `Makefile`, `docker-compose.yml`, `Dockerfile`,
+  CI-Workflow, ADR 0002 und 0007, Tests in `tests/integration/test_db_init.py` und
+  `tests/unit/`.
+- **Datensatz:** `data/titanic.csv` von
+  `https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv`
+  (891 Zeilen, Spalten wie Kaggle `train.csv`, SHA-256
+  `4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7`); Lizenzlage siehe README.
+- **Fehler / falsche Annahmen der KI:**
+  - `Literal[0, 1]` in Pydantic wandelt CSV-Strings nicht um; ersetzt durch `int` mit Grenzen.
+  - `format('%I', :name)` mit asyncpg braucht explizite Typen (`CAST(:name AS text)`).
+  - Auf dem Windows-Host findet docker-py den Docker-Desktop-Pipe nur mit
+    `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine` (im Dev Container nicht nötig).
+  - Abweichung vom Plan: Migrationen liegen im Paket statt unter `migrations/`, damit sie im
+    Image enthalten sind.
+- **Lesereihenfolge:** `src/database_mcp/config.py` → `db/schema.py` →
+  `db/migrations/versions/0001_passengers.py` → `db/init_db.py` → `db/seed.py` →
+  `tests/integration/test_db_init.py`.
+
+## Etappe 2: MCP-Server, feste Tools, Auth und Observability
+
+- **Ziel:** Server über HTTP mit vier festen Tools, API-Keys, Scopes, Rate Limit, Logs, Audit,
+  Metriken.
+- **Generiert:** `app.py`, `auth.py`, `observability.py`, `services/passengers.py`,
+  `services/dataset.py`, `db/repository.py`, `tools/`, `scripts/generate_api_key.py`,
+  Tests `tests/unit/test_auth.py` und `tests/integration/test_mcp_http.py`, ADR 0001, 0003, 0005.
+- **SDK geprüft statt angenommen:** `mcp` 2.3.0: `FastMCP` heißt jetzt `MCPServer`; das SDK
+  bietet `TokenVerifier`, `BearerAuthBackend`, `RequireAuthMiddleware`,
+  `TransportSecuritySettings` und `ServerMiddleware`; akzeptierte Protokollversionen stehen in
+  `mcp.types.version`.
+- **Fehler / falsche Annahmen der KI:**
+  - Die SDK-Variante `streamable_http_app(auth=...)` verlangt eine OAuth-`issuer_url`. Statt eine
+    URL zu erfinden, setzt die App die Auth-Bausteine des SDK selbst zusammen (ADR 0001).
+  - Die erste Filterung von `tools/list` erwartete ein Pydantic-Modell; die Middleware bekommt das
+    Ergebnis aber als Dict. Behoben (beide Formen, sonst Fehler statt stiller Durchlass).
+  - Eine Union als Rückgabetyp packt das SDK in `{"result": ...}`; `get_passenger` liefert daher
+    ein eigenes Modell `{"passenger": ...}`.
+- **Lesereihenfolge:** `app.py` → `auth.py` → `tools/common.py` → `tools/definitions.py` →
+  `services/passengers.py` → `db/repository.py` → `observability.py` →
+  `tests/integration/test_mcp_http.py`.
+
+## Etappe 3: SQL-Tool und Härtung
+
+- **Ziel:** `run_sql` mit Defense in Depth und Angriffs-Tests pro Schicht.
+- **Generiert:** `services/sql_guard.py`, `services/sql_runner.py`, Tool `run_sql`,
+  `tests/security/test_sql_attacks.py` (40 Angriffs-Queries gegen den Validator, gültige Queries,
+  Rolle ohne Validator, `NullPool`-Test, Timeout, Truncation), ADR 0004, `docs/SECURITY.md`.
+- **Fehler / falsche Annahmen der KI:**
+  - Fehler beim Streamen von Zeilen kommen als rohe asyncpg-Exception, nicht als SQLAlchemy
+    `DBAPIError`; ein Timeout wäre sonst als unerwarteter Fehler beim Agent angekommen. Der Runner
+    behandelt jetzt beide.
+  - `text()` von SQLAlchemy liest `:name` im SQL des Agents als Bind-Parameter; Doppelpunkte werden
+    vor der Ausführung maskiert (Test mit `'a:b'`).
+- **Lesereihenfolge:** `services/sql_guard.py` → `services/sql_runner.py` →
+  `tests/security/test_sql_attacks.py` → `docs/adr/0004-...` → `docs/SECURITY.md`.
+
+## Etappe 4: Container, Helm-Chart, Ende-zu-Ende-Test und Abschluss
+
+- **Ziel:** Image, Compose-Stack mit Smoke-Test, Helm-Chart, CI-Prüfungen, Abschluss der Doku.
+- **Generiert:** `scripts/smoke.py`, `deploy/helm/database-mcp/` (Deployment, Service,
+  ServiceAccounts, NetworkPolicies, PDB, db-init-Hook-Job, Ingress, ServiceMonitor,
+  `values.schema.json`), ADR 0006, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, `README.md`.
+- **Lokal verifiziert:** `docker compose up --build --wait` + `scripts/smoke.py` (alle 6 Prüfungen
+  OK); `helm lint --strict` und `kubeconform -strict` (10 gültig, ServiceMonitor als CRD
+  übersprungen) über die offiziellen Images; hadolint ohne Befund; Trivy-Image-Scan ohne
+  HIGH/CRITICAL mit Fix; `trivy config` ohne HIGH/CRITICAL; pip-audit ohne Befund; Makefile-Targets
+  `install`, `lint`, `typecheck` in einem Linux-Container.
+- **Nicht verifiziert:** CI-Lauf auf GitHub (kein Push), Start des Dev Containers, Installation in
+  einem echten Cluster, die Client-Befehle für MCP Inspector und Claude Code (aus der jeweiligen
+  Doku übernommen, nicht ausgeführt).
+  *Nachtrag:* Inzwischen sind alle CI-Läufe auf GitHub grün, und `make check` läuft im Dev
+  Container auf meinem Windows-PC grün durch (286 Tests). Offen bleiben die Installation in einem
+  echten Cluster (O4) und die Client-Befehle.
+- **Fehler / falsche Annahmen der KI:**
+  - Trivy fand im Basis-Image HIGH-Schwachstellen in `zlib1g` (Debian-Fix neuer als der gepinnte
+    Digest) und in den von pip mitgebrachten Bibliotheken. Behoben: gezieltes Sicherheitsupdate von
+    `zlib1g` und pip im Laufzeit-Image entfernt.
+  - `pip-audit --strict` bricht ab, weil das eigene Paket nicht auf PyPI liegt; ersetzt durch
+    `--skip-editable`.
+  - `db-init` setzte Rollen-Defaults auch ohne `--create-roles`; ohne `CREATEROLE`/Superuser wäre
+    der Job in echten Umgebungen gescheitert. Rollen-Defaults jetzt nur mit `--create-roles`,
+    `temp_file_limit` mit Warnung statt Abbruch, SQL für das DB-Team im README.
+  - `trivy config` bemängelte, dass das Dev-Container-Dockerfile als root endet; `USER vscode`
+    ergänzt.
+- **Lesereihenfolge:** `Dockerfile` → `docker-compose.yml` → `scripts/smoke.py` →
+  `deploy/helm/database-mcp/values.yaml` → `templates/deployment.yaml` →
+  `templates/networkpolicy.yaml` → `templates/job-db-init.yaml` → `README.md` (Kubernetes) →
+  `docs/RUNBOOK.md`.
+
+## Nachtrag: Kreuzprüfung der Tests
+
+- **Ziel:** Die vorhandenen Tests gegen den Code gegenprüfen, kritische fehlende Randfälle ergänzen
+  und dabei gefundene Fehler beheben (Sicherheit und Korrektheit vor Coverage).
+- **Generiert:** neue Testfälle in `tests/security/test_sql_attacks.py`, `tests/unit/test_auth.py`,
+  `tests/unit/test_config_and_seed.py`, `tests/integration/test_mcp_http.py` (von 127 auf
+  286 Tests); zwei kleine Korrekturen im Code, Testübersicht im README aktualisiert.
+- **Gefundene Fehler (jeweils mit Regressionstest behoben):**
+  - **SQL-Validator, CTE-Namen nicht pro Gültigkeitsbereich geprüft** (`services/sql_guard.py`):
+    Eine CTE in einer Unterabfrage gab einen gleichnamigen echten Tabellennamen im äußeren Teil
+    frei, z. B. `SELECT * FROM (WITH pg_roles AS (SELECT 1) SELECT 1) x, pg_roles`. Katalog-Views
+    wie `pg_roles`, `pg_user` und `pg_stat_activity` darf in PostgreSQL jede Rolle lesen, die
+    Datenbankrechte hätten das also nicht verhindert. Jetzt gelten CTE-Namen nur dort, wo
+    PostgreSQL sie sichtbar macht (umschließende WITH-Klauseln, nur frühere Geschwister ohne
+    RECURSIVE, Groß-/Kleinschreibung bei Anführungszeichen).
+  - **Casts auf Objekt-ID-Typen** (`regclass`, `regrole`, `regproc`, `oid`) erlaubten, den Katalog
+    abzufragen („gibt es Rolle X?“). Jetzt Allowlist gewöhnlicher Typen.
+  - **Kommentare im ausgeführten SQL:** sqlglot gibt Kommentare als `/* … */` wieder aus, PostgreSQL
+    verschachtelt Blockkommentare; ausgeführter und geprüfter Text hätten sich unterscheiden können.
+    Jetzt ohne Kommentare.
+  - **API-Key mit Zeilenumbruch am Ende akzeptiert** (`auth.py`): `re.match` mit `$` passt auch vor
+    einem abschließenden Zeilenumbruch. Jetzt `fullmatch`.
+- **Bewusst nicht ergänzt:** Last- und Fuzzing-Tests (gehören zum Sicherheitsniveau „erhöht“);
+  `serve` mit kaputter Key-Datei bricht zwar sofort ab, aber mit Stacktrace statt Exit-Code 2
+  (kein Sicherheitsproblem, nur unschöne Meldung).
+- **Lesereihenfolge:** `services/sql_guard.py` (`_visible_cte_names`, Typ-Allowlist) →
+  `tests/security/test_sql_attacks.py` (`CTE_SCOPE_BYPASSES`, `TYPE_ATTACKS`) →
+  `tests/integration/test_mcp_http.py` (Abschnitt „cross-checks“) → `tests/unit/test_auth.py`.
+
+## Meine Rolle, Review und Reflexion
+
+**Meine Rolle.** Ich habe das Projekt geplant und gesteuert, den Code hat die KI geschrieben:
+
+- Anforderungen, Annahmen und Regeln formuliert (`CLAUDE.md`, `docs/PLAN.md`), u. a. „jede
+  Entscheidung braucht eine konkrete Begründung“ und „keine APIs erfinden, sondern den Quellcode des
+  SDK lesen“.
+- Die Entscheidungen getroffen: BSI-Grundschutz als Sicherheitsmaßstab; Python 3.14 statt 3.12;
+  ein API-Key pro Agent statt pro Team; TLS zur Datenbank als Default; Salt im Key-Hash; die
+  Abweichungen A1–A3 und die offenen Punkte O1–O4 mit Begründung; Straffung auf vier Etappen mit je
+  einem Review-Stopp; Umbenennung in `database-mcp`, weil Titanic nur der Demo-Datensatz ist.
+- Lücken eingefordert, die mir beim Prüfen aufgefallen sind, z. B. vollständige Anleitung für den
+  Produktivbetrieb mit Ports und Firewall-Regeln, Checkliste für die Anbindung von Agents,
+  Ablaufdiagramm für feste Tools und freies SQL.
+
+**Wie ich reviewt habe.** Ich habe nicht jede Codezeile gelesen, sondern geprüft, ob ich jede
+**Entscheidung** und jeden **Test** verstehe und vertreten kann:
+
+- Architektur, ADRs, `docs/SECURITY.md` und den Ablauf einer Abfrage durchgearbeitet und
+  hinterfragt (z. B. warum die Datenbankrechte und nicht der Validator die harte Grenze sind).
+- Die Testübersicht geprüft: Jeder Schritt des Ablaufs ist durch eigene Tests abgedeckt.
+- Selbst ausgeführt: `make check` im Dev Container, Compose-Stack mit Smoke-Test, CI-Läufe auf
+  GitHub.
+- Eine zusätzliche, unabhängige Kreuzprüfung der Tests durch einen zweiten KI-Agenten beauftragt.
+  Sie hat vier echte Fehler gefunden, darunter eine Umgehung des SQL-Validators; alle sind mit
+  Regressionstests behoben.
+
+**Reflexion.**
+
+- *Was gut funktioniert hat:* Viel Zeit in Plan und Regeln vor dem ersten Code. Die KI hat dadurch
+  ohne Rückfragen in die richtige Richtung gearbeitet, und Fehlannahmen (z. B. zu den Rollen-Defaults
+  in PostgreSQL oder zur Auth-API des SDK) wurden früh sichtbar und dokumentiert.
+- *Was ich gelernt habe:* Einer einzelnen Prüfschicht nicht blind zu vertrauen. Die Lücken der
+  Kreuzprüfung lagen genau dort, wo nur der Validator schützt. Das bestätigt die Entscheidung, die
+  Datenbankrechte zur harten Grenze zu machen.
