@@ -27,7 +27,7 @@ BSI-Konformität: Eine Zertifizierung setzt ein ISMS der Organisation voraus. Qu
 | Last durch teure Abfragen | Cross-Join, `pg_sleep` | Statement-Timeout, App-Timeout, `temp_file_limit`, Semaphore, Rate Limit [BSI KONF.15.3] |
 | DNS-Rebinding | Browser-Seite spricht lokalen Server an | `Host`/`Origin`-Prüfung des SDK |
 | Informationspreisgabe | Stacktrace in der Antwort | Generische Fehlermeldungen; Details nur im Log [BSI DEV.3.2, DEV.3.3] |
-| Lieferkette | Manipuliertes Paket oder Image | `uv.lock` mit Hashes, Images per Digest, Actions per SHA, Trivy, pip-audit, SBOM [BSI DEV.4.3, DEV.4.4, DEV.4.5] |
+| Lieferkette | Manipuliertes Paket oder Image | `uv.lock` mit Hashes, Images per Digest, Actions und Pre-commit-Hooks per SHA, CI-Werkzeuge (uv, Helm, kubeconform) mit fester Prüfsumme, Trivy, pip-audit, SBOM [BSI DEV.4.3, DEV.4.4, DEV.4.5] |
 
 ## Zuordnung BSI-Anforderung → Maßnahme → Stelle im Repo
 
@@ -51,6 +51,7 @@ BSI-Konformität: Eine Zertifizierung setzt ein ISMS der Organisation voraus. Qu
 | SYS.1.6.A6, A17, A23 | Sichere Images, ohne Privilegien, unveränderlich | Offizielles Basis-Image per Digest, UID 10001, read-only Root-FS | `Dockerfile`, Helm-Chart |
 | APP.4.4.A7, A9, A11 | Netztrennung, ServiceAccounts, Probes | NetworkPolicy, eigener SA ohne Token, Probes | `deploy/helm/database-mcp` |
 | DEV.4.3, TR-03183-2 | SBOM | CycloneDX in der CI | `.github/workflows/ci.yml` |
+| DET.5.3, DET.5.10.2, DEV.4.5 | Schwachstellen erkennen | Trivy (Image) und pip-audit bei jedem CI-Lauf und wöchentlich auf `main` | `.github/workflows/ci.yml`, `make audit` |
 | TEST.3.1, TEST.3.2 | Sicherheitstests, Testabdeckung | `tests/security/`, Coverage ≥ 85 % | `pyproject.toml` |
 
 ## Abweichungen vom BSI

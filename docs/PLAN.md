@@ -366,12 +366,13 @@ wieder ersetzt werden. Für jeden Punkt steht fest, was zu tun wäre und welche 
     öffentliches Transparenz-Log (Rekor) genutzt werden?
 - **O3 – Automatische Abhängigkeits-Updates** [BSI DET.5.10, KONF.8.2, DEV.4.5 – SOLLTE]
   - *Heute:* Alle Versionen sind gepinnt (reproduzierbar [BSI DEV.4.4]); pip-audit und Trivy
-    finden bekannte Schwachstellen bei jedem CI-Lauf, aktualisieren aber nichts und laufen nur bei
-    Commits.
+    finden bekannte Schwachstellen bei jedem CI-Lauf, aktualisieren aber nichts. Die CI läuft
+    zusätzlich einmal pro Woche auf `main`, damit neue Schwachstellen auch ohne Commit auffallen
+    [BSI DET.5.10.2]. Einschränkung: GitHub deaktiviert geplante Läufe in öffentlichen Repos nach
+    60 Tagen ohne Aktivität; dann muss der Workflow im Tab „Actions“ wieder aktiviert werden.
   - *Nächster Schritt:* Dependabot oder Renovate für Python-Pakete, GitHub Actions, Basis-Image
     und Dev Container; Update-PRs laufen durch die volle CI und werden manuell freigegeben
-    [BSI TEST.4.1]. Zusätzlich ein wöchentlicher geplanter Scan, damit neue Schwachstellen auch
-    ohne Commit auffallen [BSI DET.5.10.2].
+    [BSI TEST.4.1].
   - *Fehlende Infos:* Welches Update-Werkzeug ist auf der Plattform etabliert? Welche Fristen gelten
     für Sicherheitsupdates?
 - **O4 – Produktionsnahe Staging-Umgebung per Infrastructure as Code** [BSI TEST.4.1.2 – SOLLTE]

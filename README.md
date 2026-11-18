@@ -311,6 +311,7 @@ make lint
 make typecheck
 make test
 make helm-check
+make audit                           # pip-audit: bekannte Schwachstellen in Abhängigkeiten
 uv run pytest tests/unit             # schnell, ohne Docker
 uv run pytest tests/integration      # braucht Docker
 uv run pytest tests/security         # Validator ohne Docker, DB-Schichten mit Docker
@@ -323,8 +324,13 @@ Bei einzelnen Suites `--no-cov` anhängen, sonst greift die Coverage-Schwelle f�
 den Docker-Desktop-Pipe: `$env:DOCKER_HOST = "npipe:////./pipe/dockerDesktopLinuxEngine"`
 (PowerShell), dann `uv run pytest`.
 
-Die CI (`.github/workflows/ci.yml`) ruft dieselben Make-Targets auf und führt zusätzlich hadolint,
-Trivy (Image und Konfiguration), pip-audit, die SBOM-Erzeugung und den Compose-E2E-Test aus.
+Die CI (`.github/workflows/ci.yml`) ruft dieselben Make-Targets auf (dazu `make audit` für
+pip-audit) und führt zusätzlich hadolint, Trivy (Image und Konfiguration), die SBOM-Erzeugung und
+den Compose-E2E-Test aus. Sie läuft bei jedem Push auf `main`, bei Pull Requests und einmal pro
+Woche (montags) auf `main`, damit neu veröffentlichte Schwachstellen auch ohne Commit auffallen
+[BSI DET.5.10.2]. Actions sind per Commit-SHA gepinnt, uv, Helm und kubeconform werden mit fester
+Prüfsumme installiert [BSI DEV.4.4]. Überholte Läufe eines Pull Requests werden abgebrochen; Läufe
+auf `main` laufen immer zu Ende, damit jeder Commit dort ein vollständiges Ergebnis hat.
 
 ## Testübersicht
 

@@ -8,7 +8,7 @@ COMPOSE ?= docker compose
 CHART := deploy/helm/database-mcp
 KUBE_VERSION ?= 1.33.0
 
-.PHONY: help install fmt lint typecheck test check helm-check up down smoke demo db-init run docker-build
+.PHONY: help install fmt lint typecheck test check helm-check audit up down smoke demo db-init run docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -35,6 +35,11 @@ helm-check: ## Lint the Helm chart and validate the rendered manifests against t
 	helm template database-mcp $(CHART) | kubeconform -strict -summary -kubernetes-version $(KUBE_VERSION)
 
 check: lint typecheck test helm-check ## Everything that must be green before a commit
+
+# Not part of check: the result changes with newly published advisories, not only with the commit.
+# The project itself is not on PyPI and is skipped; all locked dependencies are audited.
+audit: ## Known vulnerabilities in the locked Python dependencies (pip-audit, needs network)
+	$(UV) run pip-audit --skip-editable --progress-spinner off
 
 up: ## Start Postgres, db-init and the server with Docker Compose
 	$(UV) run python scripts/init_local_env.py

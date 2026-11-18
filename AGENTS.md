@@ -423,7 +423,7 @@ Deployment auffällt und nicht erst beim ersten Request.
 
 `make install` · `make fmt` · `make lint` · `make typecheck` · `make test` · `make check` (alles) ·
 `make up` / `make down` (Compose-Stack) · `make smoke` (Ende-zu-Ende-Test gegen den Compose-Stack) ·
-`make db-init` · `make run` · `make docker-build`
+`make db-init` · `make run` · `make docker-build` · `make audit` (pip-audit, in der CI)
 
 ## Definition of Done (für jede Etappe)
 

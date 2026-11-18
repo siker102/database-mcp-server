@@ -1,7 +1,9 @@
 # Same checks before every commit as in CI [BSI DEV.4.11]. Hook revisions are pinned.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    # Commit SHA instead of the tag, like the CI actions: a moved tag cannot change the hook code
+    # [BSI DEV.4.4]. `pre-commit autoupdate --freeze` keeps this format.
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
       - id: check-yaml
         exclude: ^deploy/helm/.*/templates/

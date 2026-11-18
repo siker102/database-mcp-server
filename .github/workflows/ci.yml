@@ -6,18 +6,37 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly run on main: new CVEs in the locked dependencies or the base image show up even
+  # without a commit [BSI DET.5.10.2]. Off the full hour, where GitHub delays scheduled runs.
+  schedule:
+    - cron: "17 5 * * 1"
 
 permissions:
   contents: read
 
+# Superseded pull request runs are cancelled to save time; runs on main always finish, so every
+# commit on main has a complete result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Explicit bash adds -o pipefail: a failing command inside a pipe fails the step.
+defaults:
+  run:
+    shell: bash
 
 env:
   UV_VERSION: "0.13.7"
+  # SHA-256 of uv-x86_64-unknown-linux-gnu.tar.gz from the uv GitHub release. Without it,
+  # setup-uv checks against a manifest fetched at runtime from the same source as the binary.
+  UV_SHA256: c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
+  # Same versions as in the dev container; checksums from the official release pages.
+  HELM_VERSION: v3.19.0
+  HELM_SHA256: a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496
   KUBECONFORM_VERSION: v0.7.0
   KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+  # Explicit instead of the trivy-action default, so a Trivy update is a visible change.
+  TRIVY_VERSION: v0.70.0
 
 jobs:
   check:
@@ -31,9 +50,15 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        with:
-          version: v3.19.0
+          checksum: ${{ env.UV_SHA256 }}
+      # Helm and kubeconform as release binaries with a pinned checksum, like in the dev
+      # container. azure/setup-helm was dropped: it downloads without any checksum check.
+      - name: Install Helm (checksum verified)
+        run: |
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/helm.tgz -C /usr/local/bin --strip-components=1 linux-amd64/helm
+          helm version
       - name: Install kubeconform (checksum verified)
         run: |
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/kc.tgz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
@@ -45,8 +70,7 @@ jobs:
       - run: make test
       - run: make helm-check
       - name: Known vulnerabilities in Python dependencies
-        # The project itself is not on PyPI and is skipped; all locked dependencies are audited.
-        run: uv run pip-audit --skip-editable --progress-spinner off
+        run: make audit
 
   image:
     name: image build and scans
@@ -60,6 +84,21 @@ jobs:
         with:
           dockerfile: Dockerfile
       - run: make docker-build
+      # SBOM before the vulnerability gate: when the scan fails, the SBOM shows which
+      # component is affected.
+      - name: SBOM (CycloneDX, BSI TR-03183-2)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: database-mcp:local
+          format: cyclonedx
+          output: sbom.cdx.json
+          version: ${{ env.TRIVY_VERSION }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          # A missing SBOM fails the job instead of a warning nobody reads.
+          if-no-files-found: error
       - name: Vulnerabilities in the image (fails on HIGH/CRITICAL with a fix)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -67,6 +106,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          skip-setup-trivy: true
       - name: Misconfigurations in Dockerfile and Helm chart
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -74,17 +114,7 @@ jobs:
           scan-ref: .
           severity: HIGH,CRITICAL
           exit-code: "1"
-      - name: SBOM (CycloneDX, BSI TR-03183-2)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: database-mcp:local
-          format: cyclonedx
-          output: sbom.cdx.json
           skip-setup-trivy: true
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: sbom
-          path: sbom.cdx.json
 
   e2e:
     name: end-to-end (Compose)
@@ -97,6 +127,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
+          checksum: ${{ env.UV_SHA256 }}
       - run: make install
       - run: make up
       - run: make smoke
